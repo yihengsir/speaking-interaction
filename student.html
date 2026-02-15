@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>学生端</title>
+    <title>Student - Speaking</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -14,55 +14,63 @@
 </head>
 <body class="bg-gray-100 min-h-screen flex flex-col items-center p-4">
 
-    <div class="fixed top-0 left-0 w-full bg-gray-900 text-white text-xs p-2 flex justify-between px-4 z-50">
+    <div class="fixed top-0 left-0 w-full bg-gray-900 text-white text-xs p-2 flex justify-between px-4 z-50 shadow-md">
         <span id="conn-status"><i class="fas fa-spinner fa-spin"></i> 连接中...</span>
         <span id="my-name-display" class="font-bold text-yellow-400"></span>
     </div>
 
-    <div id="setup-panel" class="bg-white w-full max-w-sm rounded-xl shadow-lg p-6 mt-16 text-center hidden">
-        <h2 class="text-xl font-bold mb-4 text-gray-800">加入口语课堂</h2>
-        <input type="text" id="name-input" class="w-full border-b-2 border-indigo-200 p-2 text-center text-lg outline-none mb-6 focus:border-indigo-600" placeholder="请输入你的名字">
-        <button onclick="login()" class="w-full bg-indigo-600 text-white py-3 rounded-lg font-bold shadow hover:bg-indigo-700">进入</button>
+    <div id="setup-panel" class="bg-white w-full max-w-sm rounded-xl shadow-lg p-6 mt-20 text-center hidden">
+        <h2 class="text-xl font-bold mb-4 text-gray-800">English Speaking Class</h2>
+        <input type="text" id="name-input" class="w-full border-b-2 border-indigo-200 p-2 text-center text-lg outline-none mb-6 focus:border-indigo-600 transition" placeholder="Enter your name (e.g., Leo)">
+        <button onclick="login()" class="w-full bg-indigo-600 text-white py-3 rounded-lg font-bold shadow hover:bg-indigo-700 transition">Join Class</button>
     </div>
 
-    <div id="main-panel" class="hidden w-full max-w-sm mt-12 flex flex-col gap-4">
+    <div id="main-panel" class="hidden w-full max-w-sm mt-16 flex flex-col gap-4 animate-fade-in">
         
         <div class="bg-white p-4 rounded-xl shadow border-l-4 border-indigo-500">
-            <h3 class="text-xs font-bold text-gray-400 uppercase mb-1">📢 题目</h3>
-            <p id="topic-display" class="text-gray-800 font-medium">等待老师发布...</p>
+            <h3 class="text-xs font-bold text-gray-400 uppercase mb-1">📢 Topic</h3>
+            <p id="topic-display" class="text-gray-800 font-medium text-lg">Waiting for teacher...</p>
         </div>
 
-        <div class="bg-white p-6 rounded-xl shadow flex flex-col items-center">
+        <div class="bg-white p-6 rounded-xl shadow flex flex-col items-center relative">
             <div id="transcript-box" class="w-full bg-gray-50 p-3 rounded h-32 overflow-y-auto text-sm text-gray-600 mb-4 border border-gray-200">
-                (点击录音，中英文均可识别...)
+                (Tap microphone and speak in English...)
             </div>
 
-            <div id="timer" class="text-3xl font-mono font-bold text-gray-300 mb-6">00:00</div>
+            <div id="timer" class="text-3xl font-mono font-bold text-gray-300 mb-6 transition-colors">00:00</div>
 
             <div class="flex gap-6 items-center">
                 <button id="btn-record" onclick="toggleRecord()" class="w-20 h-20 bg-red-500 rounded-full text-white text-3xl shadow-lg flex items-center justify-center transition active:scale-95">
                     <i class="fas fa-microphone"></i>
                 </button>
-                <button id="btn-send" onclick="sendData()" class="hidden w-20 h-20 bg-green-500 rounded-full text-white text-3xl shadow-lg flex items-center justify-center transition active:scale-95">
+                <button id="btn-send" onclick="sendData()" class="hidden w-20 h-20 bg-green-500 rounded-full text-white text-3xl shadow-lg flex items-center justify-center transition active:scale-95 animate-bounce-in">
                     <i class="fas fa-paper-plane"></i>
                 </button>
             </div>
-            <p id="hint" class="text-xs text-gray-400 mt-4">点击红色按钮开始</p>
+            <p id="hint" class="text-xs text-gray-400 mt-4">Tap red button to start</p>
         </div>
     </div>
 
     <div id="feedback-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center p-4 z-50">
-        <div class="bg-white w-full max-w-sm rounded-xl overflow-hidden shadow-2xl animate-fade-in">
-            <div class="bg-indigo-600 p-3 text-white font-bold flex justify-between">
-                <span><i class="fas fa-comment-dots mr-1"></i> 老师点评</span>
+        <div class="bg-white w-full max-w-sm rounded-xl overflow-hidden shadow-2xl animate-scale-in">
+            <div class="bg-indigo-600 p-4 text-white font-bold flex justify-between items-center">
+                <span><i class="fas fa-envelope-open-text mr-2"></i> Feedback Received</span>
                 <button onclick="closeModal()"><i class="fas fa-times"></i></button>
             </div>
-            <div class="p-4 max-h-[70vh] overflow-y-auto">
-                <div class="flex justify-around mb-4 border-b pb-4">
-                    <div class="text-center"><div class="text-3xl font-bold text-indigo-600" id="fb-score">--</div><div class="text-xs text-gray-500">SCORE</div></div>
-                    <div class="text-center"><div class="text-3xl font-bold text-purple-600" id="fb-cefr">--</div><div class="text-xs text-gray-500">CEFR</div></div>
+            <div class="p-6 text-center">
+                <div class="flex justify-center gap-8 mb-6">
+                    <div>
+                        <div class="text-4xl font-extrabold text-indigo-600" id="fb-score">--</div>
+                        <div class="text-xs text-gray-500 uppercase font-bold mt-1">Band</div>
+                    </div>
+                    <div>
+                        <div class="text-4xl font-extrabold text-purple-600" id="fb-cefr">--</div>
+                        <div class="text-xs text-gray-500 uppercase font-bold mt-1">Level</div>
+                    </div>
                 </div>
-                <div id="fb-content" class="text-sm text-gray-700 space-y-3"></div>
+                <div class="bg-gray-50 p-3 rounded text-sm text-gray-700 text-left mb-4 max-h-40 overflow-y-auto" id="fb-rationale">
+                </div>
+                <button onclick="closeModal()" class="bg-gray-800 text-white px-6 py-2 rounded-full text-sm font-bold">Close</button>
             </div>
         </div>
     </div>
@@ -72,10 +80,10 @@
     const teacherId = urlParams.get('t');
     let peer = null;
     let conn = null;
+    // 自动生成或读取 UUID
     let myUUID = localStorage.getItem('stu_uuid') || 'stu_'+Date.now();
     let myName = localStorage.getItem('stu_name') || "";
     
-    // 录音变量
     let mediaRecorder, audioChunks = [], recognition, isRecording = false, timerInterval;
 
     // 初始化
@@ -87,7 +95,7 @@
 
     function login() {
         const val = document.getElementById('name-input').value.trim();
-        if(!val) return alert("请输入名字");
+        if(!val) return alert("Please enter your name");
         myName = val;
         localStorage.setItem('stu_name', myName);
         loginDirect();
@@ -101,36 +109,37 @@
     }
 
     function initPeer() {
-        if(!teacherId) return updateStatus("❌ 无效链接", "bg-red-600");
-        updateStatus("🔄 连接中...", "bg-yellow-600");
+        if(!teacherId) return updateStatus("❌ Invalid Link", "bg-red-600");
+        updateStatus("🔄 Connecting...", "bg-yellow-600");
         
         peer = new Peer();
         peer.on('open', () => {
+            // 连接老师
             conn = peer.connect(teacherId, { metadata: { uuid: myUUID, name: myName } });
             
             conn.on('open', () => {
-                updateStatus("✅ 已连接", "bg-green-600");
-                // 强制握手，防止名字 undefined
+                updateStatus("✅ Connected", "bg-green-600");
                 conn.send({ type: 'handshake', uuid: myUUID, name: myName });
             });
 
             conn.on('data', (msg) => {
                 if(msg.type === 'topic') document.getElementById('topic-display').innerText = msg.data;
-                if(msg.type === 'ack') { alert("✅ 发送成功！"); resetUI(); }
+                if(msg.type === 'ack') { alert("✅ Sent Successfully!"); resetUI(); }
                 if(msg.type === 'feedback') showFeedback(msg.data);
             });
 
-            conn.on('close', () => updateStatus("🔴 断开", "bg-red-600"));
+            conn.on('close', () => updateStatus("🔴 Disconnected", "bg-red-600"));
+            conn.on('error', () => updateStatus("⚠️ Error", "bg-red-600"));
         });
     }
 
     function updateStatus(text, bg) {
         const el = document.getElementById('conn-status');
         el.innerText = text;
-        el.parentElement.className = `fixed top-0 left-0 w-full text-white text-xs p-2 flex justify-between px-4 z-50 ${bg}`;
+        el.parentElement.className = `fixed top-0 left-0 w-full text-white text-xs p-2 flex justify-between px-4 z-50 shadow-md ${bg}`;
     }
 
-    // 录音逻辑 (双语识别)
+    // --- 录音逻辑 (核心修改：英文识别) ---
     async function toggleRecord() {
         if(!isRecording) {
             try {
@@ -138,37 +147,41 @@
                 startRecording(stream);
                 startTimer();
                 isRecording = true;
-                // UI
+                
+                // UI 变化
                 const btn = document.getElementById('btn-record');
                 btn.innerHTML = '<i class="fas fa-stop"></i>';
                 btn.className = "w-20 h-20 bg-gray-800 rounded-full text-white text-3xl shadow-lg flex items-center justify-center recording-pulse";
                 document.getElementById('btn-send').classList.add('hidden');
-            } catch(e) { alert("无法录音，请检查权限"); }
+                document.getElementById('timer').classList.replace('text-gray-300', 'text-gray-800');
+            } catch(e) { alert("Microphone access denied. Please use HTTPS."); }
         } else {
             stopRecording();
             stopTimer();
             isRecording = false;
-            // UI
+            
+            // UI 变化
             const btn = document.getElementById('btn-record');
             btn.innerHTML = '<i class="fas fa-redo"></i>';
             btn.className = "w-20 h-20 bg-gray-400 rounded-full text-white text-3xl shadow-lg flex items-center justify-center";
             document.getElementById('btn-send').classList.remove('hidden');
-            document.getElementById('hint').innerText = "满意请发送，点击灰色按钮重录";
+            document.getElementById('hint').innerText = "Send or tap gray button to retry";
         }
     }
 
     function startRecording(stream) {
         audioChunks = [];
-        mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+        // 优先使用 audio/webm
+        const options = MediaRecorder.isTypeSupported('audio/webm') ? { mimeType: 'audio/webm' } : {};
+        mediaRecorder = new MediaRecorder(stream, options);
         mediaRecorder.ondataavailable = e => { if(e.data.size > 0) audioChunks.push(e.data); };
         mediaRecorder.start();
 
-        // 识别逻辑：设置为中文 (cmn-Hans-CN)，通常也能识别简单英文
-        // 如果想纯英文，可改为 'en-US'
+        // --- 核心修改：仅识别英文 ---
         if('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             recognition = new SpeechRecognition();
-            recognition.lang = 'cmn-Hans-CN'; // 设置为中文，以支持中英混杂（取决于引擎）
+            recognition.lang = 'en-US'; // 强制英文
             recognition.continuous = true;
             recognition.interimResults = true;
             recognition.onresult = e => {
@@ -186,12 +199,12 @@
     }
 
     function sendData() {
-        if(!conn || !conn.open) return alert("未连接老师");
+        if(!conn || !conn.open) return alert("Not connected to teacher");
         
         const blob = new Blob(audioChunks, { type: 'audio/webm' });
         const text = document.getElementById('transcript-box').innerText;
 
-        // 核心修复：将 Blob 转换为 ArrayBuffer 发送
+        // 使用 ArrayBuffer 传输录音，解决播放问题
         const reader = new FileReader();
         reader.onload = function(evt) {
             const buffer = evt.target.result;
@@ -199,9 +212,9 @@
                 type: 'submission',
                 id: Date.now(),
                 uuid: myUUID,
-                name: myName, // 再次强制携带名字
+                name: myName,
                 text: text,
-                file: buffer // 发送二进制 Buffer
+                file: buffer
             });
             document.getElementById('btn-send').innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
         };
@@ -209,13 +222,14 @@
     }
 
     function resetUI() {
-        document.getElementById('transcript-box').innerText = "(点击录音...)";
+        document.getElementById('transcript-box').innerText = "(Tap microphone...)";
         document.getElementById('btn-send').classList.add('hidden');
         document.getElementById('btn-send').innerHTML = '<i class="fas fa-paper-plane"></i>';
         const btn = document.getElementById('btn-record');
         btn.innerHTML = '<i class="fas fa-microphone"></i>';
         btn.className = "w-20 h-20 bg-red-500 rounded-full text-white text-3xl shadow-lg flex items-center justify-center";
         document.getElementById('timer').innerText = "00:00";
+        document.getElementById('timer').classList.replace('text-gray-800', 'text-gray-300');
     }
 
     function startTimer() {
@@ -231,12 +245,9 @@
     function stopTimer() { clearInterval(timerInterval); }
 
     function showFeedback(data) {
-        document.getElementById('fb-score').innerText = data.score;
-        document.getElementById('fb-cefr').innerText = data.cefr;
-        document.getElementById('fb-content').innerHTML = `
-            <div class="bg-gray-50 p-2 rounded mb-2"><strong>建议：</strong>${data.rationale}</div>
-            <div class="bg-blue-50 p-2 rounded"><strong>润色：</strong>${data.polishing}</div>
-        `;
+        document.getElementById('fb-score').innerText = data.estimated_score;
+        document.getElementById('fb-cefr').innerText = data.cefr_level;
+        document.getElementById('fb-rationale').innerText = data.score_rationale;
         document.getElementById('feedback-modal').classList.remove('hidden');
     }
     function closeModal() { document.getElementById('feedback-modal').classList.add('hidden'); }
