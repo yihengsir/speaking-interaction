@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>雅思口语 AI 课堂 - 教师端 (Pro)</title>
+  <title>雅思口语 AI 课堂 - 教师端 (修复版)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -14,24 +14,17 @@
     .main-container { min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 1rem; }
     .card { background-color: white; padding: 2rem; border-radius: 1rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 60rem; width: 100%; }
     
-    /* 状态指示灯 */
     .status-dot { height: 8px; width: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
     .status-online { background-color: #10b981; box-shadow: 0 0 4px #10b981; }
     .status-offline { background-color: #9ca3af; }
 
-    /* 其他样式保持一致 */
-    mark { background-color: #ccfbf1; color: #0f766e; padding: 0.15em 0.3em; border-radius: 4px; border-bottom: 2px solid #2dd4bf; }
-    .ai-section { margin-top: 1.5rem; border: 1px solid #e5e7eb; border-radius: 0.75rem; overflow: hidden; }
-    .ai-header { background-color: #f3f4f6; padding: 0.75rem 1rem; font-weight: 700; color: #374151; border-bottom: 1px solid #e5e7eb; }
+    /* AI 报告样式 */
+    .ai-section { margin-top: 1rem; border: 1px solid #e5e7eb; border-radius: 0.5rem; overflow: hidden; }
+    .ai-header { background-color: #f9fafb; padding: 0.5rem 1rem; font-weight: bold; border-bottom: 1px solid #e5e7eb; }
     .ai-body { padding: 1rem; background-color: #fff; }
-    
-    .score-card { display: flex; flex-direction: column; align-items: center; background: linear-gradient(135deg, #fff, #fefaff); border: 1px solid #e9d5ff; border-radius: 1rem; padding: 1.5rem; }
-    @media (min-width: 768px) { .score-card { flex-direction: row; justify-content: space-around; } }
-    .score-value { font-size: 2.5rem; font-weight: 800; color: #4f46e5; }
-    
-    .error-table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
-    .error-table th { text-align: left; padding: 0.75rem; background-color: #fef2f2; color: #991b1b; }
-    .error-table td { padding: 0.75rem; border-bottom: 1px solid #f3f4f6; }
+    .score-value { font-size: 2rem; font-weight: 800; color: #4f46e5; }
+    .error-table { width: 100%; font-size: 0.9rem; }
+    .error-table td { padding: 4px; border-bottom: 1px solid #eee; }
   </style>
 </head>
 <body>
@@ -39,39 +32,35 @@
 <main class="main-container">
   <div class="card">
     <div class="flex justify-between items-center mb-6 border-b pb-4">
-        <h1 class="text-2xl font-bold text-gray-800"><i class="fas fa-chalkboard-teacher mr-2 text-indigo-600"></i>雅思口语 AI 课堂 (Pro)</h1>
+        <h1 class="text-2xl font-bold text-gray-800"><i class="fas fa-chalkboard-teacher mr-2 text-indigo-600"></i>雅思口语 AI 课堂</h1>
         <div class="text-right">
-            <div class="text-xs text-gray-500">Teacher Console</div>
-            <div id="connection-status-badge" class="text-xs font-bold text-red-500">🔴 未连接服务器</div>
+            <div id="connection-status-badge" class="text-xs font-bold text-red-500">🔴 未连接</div>
         </div>
     </div>
 
-    <div class="mb-4 bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex justify-between items-center">
-        <div class="flex items-center gap-2 flex-1">
-            <i class="fas fa-key text-yellow-600"></i>
-            <input type="password" id="api-key-input" class="flex-1 p-1 bg-transparent border-b border-yellow-300 outline-none text-sm" placeholder="输入 Gemini API Key" />
-        </div>
-        <button onclick="saveApiKey()" class="ml-2 text-xs bg-yellow-600 text-white px-3 py-1 rounded">保存</button>
+    <div class="mb-4 bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex gap-2 items-center">
+        <i class="fas fa-key text-yellow-600"></i>
+        <input type="password" id="api-key-input" class="flex-1 bg-transparent outline-none text-sm" placeholder="输入 Google Gemini API Key" />
+        <button onclick="saveApiKey()" class="text-xs bg-yellow-600 text-white px-3 py-1 rounded hover:bg-yellow-700">保存</button>
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div class="md:col-span-1 bg-indigo-50 p-4 rounded-lg border border-indigo-100 flex flex-col items-center justify-center text-center">
+        <div class="md:col-span-1 bg-indigo-50 p-4 rounded-lg flex flex-col items-center justify-center text-center border border-indigo-100">
             <div id="qrcode" class="bg-white p-2 rounded shadow-sm mb-2"></div>
-            <p class="text-xs text-indigo-600 font-mono mb-1" id="classroom-id-display">ID: 初始化中...</p>
-            <p class="text-xs text-gray-400">扫码加入课堂</p>
+            <p class="text-xs text-indigo-600 font-mono mb-2" id="classroom-id-display">ID: 初始化中...</p>
+            <button onclick="copyStudentLink()" class="bg-white border border-indigo-200 text-indigo-700 text-xs px-3 py-1 rounded hover:bg-indigo-50 transition">
+                <i class="fas fa-link mr-1"></i> 复制学生链接
+            </button>
         </div>
 
         <div class="md:col-span-2 flex flex-col gap-4">
             <div>
-                <label class="flex justify-between text-sm font-bold text-gray-700 mb-1">
-                    <span>📌 当前题目 (修改后自动同步给学生)</span>
-                    <span id="sync-status" class="text-xs text-green-600 hidden"><i class="fas fa-check"></i> 已同步</span>
-                </label>
-                <textarea id="topic-input" class="w-full p-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-indigo-500" rows="2" placeholder="输入题目，例如：Describe a time you were busy..." oninput="broadcastTopic()"></textarea>
+                <label class="block text-sm font-bold text-gray-700 mb-1">📌 当前题目 (实时同步)</label>
+                <textarea id="topic-input" class="w-full p-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-indigo-500" rows="2" placeholder="输入题目..." oninput="broadcastTopic()"></textarea>
             </div>
-
-            <div class="bg-gray-50 rounded-lg p-3 border border-gray-200 min-h-[80px]">
-                <h4 class="text-xs font-bold text-gray-500 uppercase mb-2">在线学生列表</h4>
+            
+            <div class="bg-gray-50 rounded-lg p-3 border border-gray-200 min-h-[60px]">
+                <h4 class="text-xs font-bold text-gray-500 uppercase mb-2">在线学生</h4>
                 <div id="student-list" class="flex flex-wrap gap-2">
                     <span class="text-gray-400 text-sm italic">等待连接...</span>
                 </div>
@@ -79,51 +68,40 @@
         </div>
     </div>
 
-    <div id="submission-area" class="mb-8">
+    <div class="mb-8">
         <h3 class="font-bold text-gray-800 mb-3 border-l-4 border-indigo-500 pl-3">📥 提交记录</h3>
         <div id="submissions-list" class="space-y-3"></div>
     </div>
 
-    <div id="analysis-panel" class="hidden animate-fade-in border-t-2 border-dashed border-gray-300 pt-6">
+    <div id="analysis-panel" class="hidden border-t-2 border-dashed border-gray-300 pt-6 animate-fade-in">
         <div class="flex justify-between items-center mb-4">
-             <h2 class="text-xl font-bold text-gray-800">📊 分析报告: <span id="current-analysis-student" class="text-indigo-600">--</span></h2>
-             <button id="btn-send-feedback" onclick="sendFeedbackToStudent()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded shadow text-sm flex items-center gap-2">
-                <i class="fas fa-paper-plane"></i> 发送点评给学生
+             <h2 class="text-xl font-bold text-gray-800">📊 分析: <span id="current-analysis-student" class="text-indigo-600">--</span></h2>
+             <button id="btn-send-feedback" onclick="sendFeedbackToStudent()" class="bg-green-600 text-white px-4 py-2 rounded shadow text-sm disabled:opacity-50">
+                <i class="fas fa-paper-plane mr-1"></i> 发送点评
              </button>
         </div>
-
-        <div class="mb-4 text-sm bg-gray-50 p-3 rounded border" id="live-transcription-text"></div>
-
-        <div id="score-panel" class="score-card mb-4 hidden">
-           <div class="text-center"><div class="score-value" id="score-val">--</div><div class="text-xs font-bold text-gray-500">BAND</div></div>
-           <div class="text-center"><div class="score-value text-purple-600" id="cefr-val">--</div><div class="text-xs font-bold text-gray-500">CEFR</div></div>
-           <div class="flex-1 px-4 text-sm text-gray-600 italic" id="score-reason"></div>
+        <div class="mb-4 text-sm bg-gray-50 p-3 rounded border italic text-gray-700" id="live-transcription-text"></div>
+        
+        <div id="score-panel" class="hidden grid-cols-2 gap-4 mb-4">
+            <div class="text-center bg-indigo-50 p-2 rounded"><div class="score-value" id="score-val">--</div><div class="text-xs font-bold text-gray-500">BAND</div></div>
+            <div class="text-center bg-purple-50 p-2 rounded"><div class="score-value text-purple-600" id="cefr-val">--</div><div class="text-xs font-bold text-gray-500">CEFR</div></div>
         </div>
-
-        <div class="grid gap-4">
-            <div class="ai-section border-red-200">
-                <div class="ai-header bg-red-50 text-red-800">纠错</div>
-                <div class="ai-body p-0"><table class="error-table"><tbody id="ai-error-tbody"></tbody></table></div>
-            </div>
-            <div class="ai-section border-blue-200">
-                <div class="ai-header bg-blue-50 text-blue-800">润色</div>
-                <div class="ai-body text-gray-700 whitespace-pre-wrap" id="ai-enhancement"></div>
-            </div>
-        </div>
+        
+        <div id="ai-content-area" class="space-y-4"></div>
     </div>
   </div>
 </main>
 
 <script>
-  // ===== 全局状态 =====
+  // ===== 全局变量 =====
   const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
   let peer = null;
-  // 学生 Map: uuid -> { conn, name, status }
-  let students = new Map();
-  let currentAnalysisData = null; // 存储当前分析结果以便回传
-  let currentStudentUUID = null;  // 当前正在分析的学生ID
+  let students = new Map(); // uuid -> { conn, name, status }
+  let currentAnalysisData = null;
+  let currentStudentUUID = null;
+  let studentLink = "";
 
-  // ===== 初始化与设置 =====
+  // ===== 初始化 =====
   window.addEventListener('load', () => {
       const key = localStorage.getItem('MY_GEMINI_KEY');
       if(key) document.getElementById('api-key-input').value = key;
@@ -132,226 +110,204 @@
 
   function saveApiKey() {
       const key = document.getElementById('api-key-input').value.trim();
-      if(key) {
-          localStorage.setItem('MY_GEMINI_KEY', key);
-          alert("Key 已保存");
-      }
+      if(key) { localStorage.setItem('MY_GEMINI_KEY', key); alert("Key 已保存"); }
   }
 
-  // ===== WebRTC 逻辑 =====
+  // ===== WebRTC 核心修复 =====
   function initTeacherPeer() {
       peer = new Peer(null, { debug: 1 });
 
       peer.on('open', (id) => {
-          document.getElementById('connection-status-badge').innerText = "🟢 服务正常";
+          document.getElementById('connection-status-badge').innerText = "🟢 在线 (ID: " + id + ")";
           document.getElementById('connection-status-badge').className = "text-xs font-bold text-green-600";
           document.getElementById('classroom-id-display').innerText = `ID: ${id}`;
           
-          // 生成学生链接
+          // 生成链接
           const baseUrl = window.location.href.replace('teacher.html', 'student.html').split('?')[0];
-          const studentUrl = baseUrl.endsWith('student.html') ? baseUrl : baseUrl.replace(/[^/]*$/, 'student.html');
-          const finalLink = `${studentUrl}?t=${id}`;
+          const urlObj = baseUrl.endsWith('student.html') ? baseUrl : baseUrl.replace(/[^/]*$/, 'student.html');
+          studentLink = `${urlObj}?t=${id}`;
           
-          new QRCode(document.getElementById("qrcode"), { text: finalLink, width: 100, height: 100 });
+          // 生成二维码
+          document.getElementById("qrcode").innerHTML = "";
+          new QRCode(document.getElementById("qrcode"), { text: studentLink, width: 100, height: 100 });
       });
 
       peer.on('connection', (conn) => {
-          handleConnection(conn);
-      });
-      
-      peer.on('error', (err) => {
-          console.error(err);
-          document.getElementById('connection-status-badge').innerText = "🔴 连接断开";
-      });
-  }
-
-  function handleConnection(conn) {
-      conn.on('open', () => {
-          // 此时 metadata 应该包含 { name, uuid }
-          const meta = conn.metadata || {};
-          const uuid = meta.uuid;
-          const name = meta.name || "匿名";
-
-          if(uuid) {
-              // 更新或新增学生
-              students.set(uuid, { conn: conn, name: name, status: 'online' });
-              updateStudentUI();
-              
-              // 立即把当前题目发给他
-              const currentTopic = document.getElementById('topic-input').value;
-              if(currentTopic) {
-                  conn.send({ type: 'topic', data: currentTopic });
+          // 连接监听
+          conn.on('open', () => {
+              // 尝试从 metadata 获取，如果没有，等待第一次 handshake
+              if(conn.metadata && conn.metadata.uuid) {
+                  registerStudent(conn.metadata.uuid, conn.metadata.name, conn);
               }
-          }
-      });
+          });
 
-      conn.on('data', (data) => {
-          // 收到数据
-          if (data.type === 'submission') {
-              // 1. 发送回执 (ACK) 解决“提交后看不到”的问题
-              conn.send({ type: 'ack', id: data.id }); 
-              
-              // 2. 处理提交
-              handleSubmission(data, conn.metadata.uuid);
-          }
-      });
+          conn.on('data', (data) => {
+              // 1. 握手包 (解决名字 undefined)
+              if (data.type === 'handshake') {
+                  registerStudent(data.uuid, data.name, conn);
+              }
+              // 2. 提交包
+              if (data.type === 'submission') {
+                  conn.send({ type: 'ack', id: data.id }); // 回执
+                  handleSubmission(data);
+              }
+          });
 
-      conn.on('close', () => {
-          const uuid = conn.metadata.uuid;
-          if(students.has(uuid)) {
-              students.get(uuid).status = 'offline';
-              updateStudentUI();
-          }
-      });
-      
-      conn.on('error', () => {
-           // 处理异常断开
-           const uuid = conn.metadata.uuid;
-           if(students.has(uuid)) {
-              students.get(uuid).status = 'offline';
-              updateStudentUI();
-          }
+          conn.on('close', () => updateStudentStatus(conn.metadata?.uuid, 'offline'));
+          conn.on('error', () => updateStudentStatus(conn.metadata?.uuid, 'offline'));
       });
   }
 
-  // ===== UI 更新逻辑 =====
-  function updateStudentUI() {
-      const listEl = document.getElementById('student-list');
-      listEl.innerHTML = "";
-      
-      if(students.size === 0) {
-          listEl.innerHTML = '<span class="text-gray-400 text-sm italic">等待连接...</span>';
-          return;
-      }
+  function registerStudent(uuid, name, conn) {
+      if(!uuid) return;
+      students.set(uuid, { conn: conn, name: name || "未知同学", status: 'online' });
+      // 更新元数据以备后用
+      conn.metadata = { uuid, name };
+      updateStudentUI();
+      // 发送当前题目
+      const topic = document.getElementById('topic-input').value;
+      if(topic) conn.send({ type: 'topic', data: topic });
+  }
 
-      students.forEach((student, uuid) => {
+  function updateStudentStatus(uuid, status) {
+      if(uuid && students.has(uuid)) {
+          students.get(uuid).status = status;
+          updateStudentUI();
+      }
+  }
+
+  function updateStudentUI() {
+      const list = document.getElementById('student-list');
+      list.innerHTML = "";
+      if(students.size === 0) { list.innerHTML = '<span class="text-gray-400 text-sm italic">等待连接...</span>'; return; }
+      
+      students.forEach((s) => {
           const badge = document.createElement('div');
           badge.className = "flex items-center bg-white border border-gray-200 rounded-full px-3 py-1 text-sm shadow-sm";
-          const statusClass = student.status === 'online' ? 'status-online' : 'status-offline';
-          const statusText = student.status === 'online' ? '' : '(离线)';
-          const textColor = student.status === 'online' ? 'text-gray-700' : 'text-gray-400';
-          
-          badge.innerHTML = `
-            <span class="status-dot ${statusClass}"></span>
-            <span class="font-bold ${textColor}">${student.name} ${statusText}</span>
-          `;
-          listEl.appendChild(badge);
+          const color = s.status === 'online' ? 'bg-green-500' : 'bg-gray-400';
+          badge.innerHTML = `<span class="status-dot ${color}"></span><span class="font-bold text-gray-700">${s.name}</span>`;
+          list.appendChild(badge);
       });
+  }
+
+  function copyStudentLink() {
+      if(!studentLink) return alert("链接未生成");
+      navigator.clipboard.writeText(studentLink).then(() => alert("已复制链接，可发送给学生"));
   }
 
   function broadcastTopic() {
       const topic = document.getElementById('topic-input').value;
-      const indicator = document.getElementById('sync-status');
-      
-      // 广播给所有在线学生
-      students.forEach((student) => {
-          if(student.status === 'online' && student.conn.open) {
-              student.conn.send({ type: 'topic', data: topic });
-          }
+      students.forEach(s => {
+          if(s.status === 'online' && s.conn.open) s.conn.send({ type: 'topic', data: topic });
       });
-      
-      indicator.classList.remove('hidden');
-      setTimeout(() => indicator.classList.add('hidden'), 2000);
   }
 
-  function handleSubmission(data, uuid) {
-      // data: { id, name, text, blob, timestamp }
+  // ===== 提交处理 (修复 Blob) =====
+  function handleSubmission(data) {
+      // data: { uuid, name, text, file: ArrayBuffer } -> 注意这里接收 ArrayBuffer
       const container = document.getElementById('submissions-list');
-      const audioUrl = URL.createObjectURL(new Blob([data.blob], { type: 'audio/webm' }));
       
+      // 1. 重建 Blob (修复音频无法播放的核心)
+      const audioBlob = new Blob([data.file], { type: 'audio/webm' });
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const studentName = data.name || "未知学生"; // 使用包内名字防止 undefined
+
+      const id = `sub-${Date.now()}`;
       const item = document.createElement('div');
+      item.id = id;
       item.className = "bg-white p-4 rounded-lg border border-gray-200 shadow-sm flex flex-col md:flex-row gap-4 items-start animate-fade-in";
       item.innerHTML = `
         <div class="flex-1 w-full">
             <div class="flex justify-between items-center mb-2">
-                <span class="font-bold text-indigo-700 text-lg">${data.name}</span>
-                <span class="text-xs text-gray-400">${new Date(data.timestamp).toLocaleTimeString()}</span>
+                <span class="font-bold text-indigo-700 text-lg">${studentName}</span>
+                <span class="text-xs text-gray-400">${new Date().toLocaleTimeString()}</span>
             </div>
-            <div class="bg-gray-50 p-2 rounded text-gray-600 text-sm mb-2 italic border border-gray-100">${data.text || "(无识别文本)"}</div>
-            <audio controls src="${audioUrl}" class="w-full h-8"></audio>
+            <div class="bg-gray-50 p-2 rounded text-gray-600 text-sm mb-2 italic border border-gray-100 min-h-[1.5rem]">${data.text || "(无识别文本)"}</div>
+            <audio controls src="${audioUrl}" class="w-full h-8 bg-gray-100 rounded"></audio>
         </div>
-        <div class="flex-shrink-0 mt-2 md:mt-0">
-             <button onclick="analyzeSubmission('${uuid}', '${encodeURIComponent(data.text)}', this)" class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-4 py-2 rounded shadow transition">
+        <div class="flex flex-col gap-2 mt-2 md:mt-0">
+             <button onclick="analyzeSubmission('${data.uuid}', '${encodeURIComponent(data.text)}', '${studentName}')" class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-4 py-2 rounded shadow transition">
                 AI 点评
+             </button>
+             <button onclick="deleteSubmission('${id}')" class="bg-red-100 hover:bg-red-200 text-red-600 text-sm px-4 py-2 rounded transition">
+                <i class="fas fa-trash"></i> 删除
              </button>
         </div>
       `;
       container.prepend(item);
   }
 
-  // ===== AI 分析与反馈 =====
-  async function analyzeSubmission(uuid, encodedText, btn) {
-      const text = decodeURIComponent(encodedText);
-      const student = students.get(uuid);
-      if(!student) return alert("找不到该学生信息");
+  function deleteSubmission(id) {
+      const el = document.getElementById(id);
+      if(el) el.remove();
+  }
 
-      // 1. 界面准备
+  // ===== AI 分析 =====
+  async function analyzeSubmission(uuid, encodedText, name) {
+      const text = decodeURIComponent(encodedText);
+      const topic = document.getElementById('topic-input').value;
+      
       currentStudentUUID = uuid;
-      document.getElementById('current-analysis-student').innerText = student.name;
+      document.getElementById('current-analysis-student').innerText = name;
       document.getElementById('live-transcription-text').innerText = text;
       document.getElementById('analysis-panel').classList.remove('hidden');
       document.getElementById('analysis-panel').scrollIntoView({ behavior: 'smooth' });
-      document.getElementById('btn-send-feedback').disabled = true;
-      document.getElementById('btn-send-feedback').innerText = "AI 生成中...";
+      
+      const btn = document.getElementById('btn-send-feedback');
+      btn.disabled = true;
+      btn.innerText = "生成中...";
 
-      // 2. 调用 API
       const apiKey = localStorage.getItem('MY_GEMINI_KEY');
-      if(!apiKey) return alert("请先设置 API Key");
+      if(!apiKey) return alert("请设置 API Key");
 
-      const topic = document.getElementById('topic-input').value;
       const prompt = `
-        Role: IELTS Speaking Examiner. Analyze: "${text}". Topic: "${topic}".
-        Output JSON: { "score": 6.5, "cefr": "B2", "rationale": "Summary", "errors": [{"org":"err","fix":"fix","type":"gr"}], "polishing": "better ver", "sample": "band 9 ver" }
+        Role: IELTS Speaking Examiner. 
+        Task: Analyze: "${text}". Topic: "${topic}".
+        Output JSON: { "score": 6.5, "cefr": "B2", "rationale": "...", "errors": [{"org":"...","fix":"..."}], "polishing": "..." }
       `;
 
       try {
-          const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+          const res = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
           });
-          const raw = await response.json();
-          const cleanJson = raw.candidates[0].content.parts[0].text.replace(/```json|```/g, '');
-          const result = JSON.parse(cleanJson);
+          const raw = await res.json();
+          const jsonStr = raw.candidates[0].content.parts[0].text.replace(/```json|```/g, '');
+          const result = JSON.parse(jsonStr);
           
           renderAnalysis(result);
-          
-          // 启用发送按钮
           currentAnalysisData = result;
-          const sendBtn = document.getElementById('btn-send-feedback');
-          sendBtn.disabled = false;
-          sendBtn.innerHTML = '<i class="fas fa-paper-plane mr-2"></i> 发送点评给学生';
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fas fa-paper-plane mr-1"></i> 发送点评';
 
       } catch(e) {
-          alert("分析失败: " + e.message);
-          document.getElementById('btn-send-feedback').innerText = "生成失败";
+          alert("AI 错误: " + e.message);
+          btn.innerText = "生成失败";
       }
   }
 
   function renderAnalysis(data) {
       document.getElementById('score-panel').classList.remove('hidden');
-      document.getElementById('score-panel').classList.add('flex');
+      document.getElementById('score-panel').classList.add('grid');
       document.getElementById('score-val').innerText = data.score;
       document.getElementById('cefr-val').innerText = data.cefr;
-      document.getElementById('score-reason').innerText = data.rationale;
       
-      const tbody = document.getElementById('ai-error-tbody');
-      tbody.innerHTML = (data.errors || []).map(e => `<tr><td class="text-red-700"><del>${e.org}</del></td><td class="text-green-700">${e.fix}</td></tr>`).join('');
-      document.getElementById('ai-enhancement').innerText = data.polishing;
+      const area = document.getElementById('ai-content-area');
+      area.innerHTML = `
+        <div class="ai-section"><div class="ai-header">改进建议</div><div class="ai-body text-sm">${data.rationale}</div></div>
+        <div class="ai-section"><div class="ai-header">纠错</div><div class="ai-body"><table class="error-table">${(data.errors||[]).map(e=>`<tr><td class="text-red-600"><del>${e.org}</del></td><td class="text-green-600">${e.fix}</td></tr>`).join('')}</table></div></div>
+        <div class="ai-section"><div class="ai-header">润色</div><div class="ai-body text-sm text-gray-700">${data.polishing}</div></div>
+      `;
   }
 
   function sendFeedbackToStudent() {
-      if(!currentStudentUUID || !currentAnalysisData) return;
-      
       const student = students.get(currentStudentUUID);
-      if(student && student.status === 'online' && student.conn.open) {
-          student.conn.send({
-              type: 'feedback',
-              data: currentAnalysisData
-          });
-          alert(`✅ 已发送点评给 ${student.name}`);
+      if(student && student.conn.open) {
+          student.conn.send({ type: 'feedback', data: currentAnalysisData });
+          alert("已发送给 " + student.name);
       } else {
-          alert(`❌ 发送失败：${student ? student.name : '学生'} 当前离线`);
+          alert("发送失败：学生离线");
       }
   }
 </script>
