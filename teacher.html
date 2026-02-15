@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>雅思口语 AI 课堂 - 教师端 (修复版)</title>
+  <title>雅思口语 AI 课堂 - 教师端 (旗舰版)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -14,17 +14,45 @@
     .main-container { min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 1rem; }
     .card { background-color: white; padding: 2rem; border-radius: 1rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 60rem; width: 100%; }
     
+    /* 状态点 */
     .status-dot { height: 8px; width: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
     .status-online { background-color: #10b981; box-shadow: 0 0 4px #10b981; }
     .status-offline { background-color: #9ca3af; }
 
-    /* AI 报告样式 */
-    .ai-section { margin-top: 1rem; border: 1px solid #e5e7eb; border-radius: 0.5rem; overflow: hidden; }
-    .ai-header { background-color: #f9fafb; padding: 0.5rem 1rem; font-weight: bold; border-bottom: 1px solid #e5e7eb; }
+    /* --- 核心 AI 分析样式 (完全对齐参考 HTML) --- */
+    
+    /* 高亮与润色 */
+    mark { background-color: #ccfbf1; color: #0f766e; padding: 0.15em 0.3em; margin: 0 0.1em; border-radius: 4px; font-weight: 600; border-bottom: 2px solid #2dd4bf; text-decoration: none; display: inline-block; line-height: 1.2; }
+    
+    /* AI 板块通用 */
+    .ai-section { margin-top: 1.5rem; border: 1px solid #e5e7eb; border-radius: 0.75rem; overflow: hidden; }
+    .ai-header { background-color: #f3f4f6; padding: 0.75rem 1rem; font-weight: 700; color: #374151; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; gap: 0.5rem; }
     .ai-body { padding: 1rem; background-color: #fff; }
-    .score-value { font-size: 2rem; font-weight: 800; color: #4f46e5; }
-    .error-table { width: 100%; font-size: 0.9rem; }
-    .error-table td { padding: 4px; border-bottom: 1px solid #eee; }
+    
+    /* 评分卡 */
+    .score-card { background: linear-gradient(135deg, #ffffff 0%, #fefaff 100%); border: 1px solid #e9d5ff; border-radius: 1rem; padding: 1.5rem; margin-bottom: 2rem; box-shadow: 0 2px 10px rgba(147, 51, 234, 0.05); display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    @media (min-width: 768px) { .score-card { flex-direction: row; justify-content: space-around; align-items: center; text-align: left; } }
+    .score-item { text-align: center; padding: 0.5rem 1rem; }
+    .score-value { font-size: 2.5rem; font-weight: 800; line-height: 1; margin-bottom: 0.25rem; }
+    .score-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; font-weight: 600; }
+    .score-divider { height: 1px; width: 100%; background-color: #e5e7eb; margin: 1rem 0; }
+    @media (min-width: 768px) { .score-divider { width: 1px; height: 3rem; margin: 0 1rem; background-color: #e5e7eb; } }
+
+    /* 纠错表格 */
+    .error-table { width: 100%; border-collapse: collapse; font-size: 0.95rem; table-layout: fixed; }
+    .error-table th { text-align: left; padding: 0.75rem; background-color: #fef2f2; color: #991b1b; font-weight: 600; border-bottom: 2px solid #fee2e2; }
+    .error-table td { padding: 0.75rem; border-bottom: 1px solid #f3f4f6; vertical-align: middle; word-wrap: break-word; }
+    .error-table del { color: #b91c1c; text-decoration: line-through; background-color: #fee2e2; padding: 2px 4px; border-radius: 2px; }
+
+    /* 词汇标签 */
+    .vocab-tag { display: inline-block; background-color: #ecfdf5; color: #047857; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.9rem; margin-right: 0.5rem; margin-bottom: 0.5rem; border: 1px solid #d1fae5; }
+
+    /* 框架填空 */
+    .cloze-blank { display: inline-block; border-bottom: 2px solid #94a3b8; min-width: 60px; color: transparent; margin: 0 4px; position: relative; }
+    .cloze-hint { color: #64748b; font-size: 0.85em; font-weight: 600; background-color: #f1f5f9; padding: 2px 6px; border-radius: 4px; border: 1px dashed #cbd5e1; }
+    
+    /* 润色行高 */
+    #ai-enhancement { line-height: 2.2; }
   </style>
 </head>
 <body>
@@ -56,7 +84,7 @@
         <div class="md:col-span-2 flex flex-col gap-4">
             <div>
                 <label class="block text-sm font-bold text-gray-700 mb-1">📌 当前题目 (实时同步)</label>
-                <textarea id="topic-input" class="w-full p-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-indigo-500" rows="2" placeholder="输入题目..." oninput="broadcastTopic()"></textarea>
+                <textarea id="topic-input" class="w-full p-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-indigo-500" rows="2" placeholder="例如: Describe a time you were busy..." oninput="broadcastTopic()"></textarea>
             </div>
             
             <div class="bg-gray-50 rounded-lg p-3 border border-gray-200 min-h-[60px]">
@@ -73,35 +101,94 @@
         <div id="submissions-list" class="space-y-3"></div>
     </div>
 
-    <div id="analysis-panel" class="hidden border-t-2 border-dashed border-gray-300 pt-6 animate-fade-in">
-        <div class="flex justify-between items-center mb-4">
-             <h2 class="text-xl font-bold text-gray-800">📊 分析: <span id="current-analysis-student" class="text-indigo-600">--</span></h2>
-             <button id="btn-send-feedback" onclick="sendFeedbackToStudent()" class="bg-green-600 text-white px-4 py-2 rounded shadow text-sm disabled:opacity-50">
-                <i class="fas fa-paper-plane mr-1"></i> 发送点评
-             </button>
+    <div id="analysis-panel" class="hidden border-t-4 border-indigo-100 pt-6 animate-fade-in">
+        <div class="text-center mb-6">
+             <h2 class="text-2xl font-bold text-gray-800">📊 AI 深度分析报告</h2>
+             <p class="text-sm text-gray-500">学员: <span id="current-analysis-student" class="font-bold text-indigo-600">--</span></p>
         </div>
-        <div class="mb-4 text-sm bg-gray-50 p-3 rounded border italic text-gray-700" id="live-transcription-text"></div>
-        
-        <div id="score-panel" class="hidden grid-cols-2 gap-4 mb-4">
-            <div class="text-center bg-indigo-50 p-2 rounded"><div class="score-value" id="score-val">--</div><div class="text-xs font-bold text-gray-500">BAND</div></div>
-            <div class="text-center bg-purple-50 p-2 rounded"><div class="score-value text-purple-600" id="cefr-val">--</div><div class="text-xs font-bold text-gray-500">CEFR</div></div>
+
+        <div id="score-panel" class="hidden score-card">
+           <div class="score-item">
+               <div class="score-value text-indigo-600" id="score-val">--</div>
+               <div class="score-label">IELTS Band</div>
+           </div>
+           <div class="score-divider"></div>
+           <div class="score-item">
+               <div class="score-value text-purple-600" id="cefr-val">--</div>
+               <div class="score-label">CEFR Level</div>
+           </div>
+           <div class="score-divider"></div>
+           <div class="flex-1 px-4 text-sm text-gray-600 italic leading-relaxed text-center md:text-left" id="score-reason">
+               AI 分析中...
+           </div>
+        </div>
+
+        <div class="ai-section border-red-200">
+          <div class="ai-header bg-red-50 text-red-800">
+            <i class="fas fa-bug"></i> 语法纠错详情 (Error Details)
+          </div>
+          <div class="ai-body p-0 overflow-x-auto">
+             <table class="error-table">
+               <thead><tr><th class="w-1/3">❌ 你的表达</th><th class="w-1/3">✅ 建议修改</th><th class="w-1/3">💡 错误类型</th></tr></thead>
+               <tbody id="ai-error-tbody"></tbody>
+             </table>
+          </div>
+        </div>
+
+        <div class="ai-section border-blue-200">
+          <div class="ai-header bg-blue-50 text-blue-800">
+            <i class="fas fa-magic"></i> 地道口语润色 (Oral Polishing)
+          </div>
+           <div class="ai-body text-gray-700 whitespace-pre-wrap">
+             <p class="text-sm text-gray-500 mb-2 italic">绿色高亮 <mark class="px-1 text-sm">highlight</mark> 为更地道的表达。</p>
+             <div id="ai-enhancement" class="text-lg leading-relaxed"></div>
+          </div>
+        </div>
+
+        <div class="ai-section border-orange-200">
+            <div class="ai-header bg-orange-50 text-orange-800">
+              <i class="fas fa-dumbbell"></i> 框架与表达特训 (Framework Practice)
+            </div>
+             <div class="ai-body text-gray-700 whitespace-pre-wrap">
+               <div id="ai-framework" class="text-lg leading-relaxed bg-orange-50/20 p-4 rounded-lg border border-orange-100"></div>
+            </div>
         </div>
         
-        <div id="ai-content-area" class="space-y-4"></div>
+        <div class="ai-section border-green-200">
+          <div class="ai-header bg-green-50 text-green-800">
+            <i class="fas fa-book-open"></i> 词汇与搭配积累 (Vocabulary)
+          </div>
+          <div class="ai-body" id="ai-vocab-list"></div>
+        </div>
+
+        <div class="ai-section border-purple-200">
+          <div class="ai-header bg-purple-50 text-purple-800">
+            <i class="fas fa-star"></i> 满分口语范文 (Model Answer)
+          </div>
+          <div class="ai-body text-gray-700 whitespace-pre-wrap">
+              <div id="ai-sample"></div>
+          </div>
+        </div>
+
+        <div class="mt-6 text-center">
+            <button id="btn-send-feedback" onclick="sendFeedbackToStudent()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-8 rounded-full shadow-lg transition transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
+                <i class="fas fa-paper-plane mr-2"></i> 发送完整报告给学生
+            </button>
+        </div>
     </div>
+
   </div>
 </main>
 
 <script>
-  // ===== 全局变量 =====
+  // ===== 配置 =====
   const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
   let peer = null;
-  let students = new Map(); // uuid -> { conn, name, status }
+  let students = new Map(); 
   let currentAnalysisData = null;
   let currentStudentUUID = null;
   let studentLink = "";
 
-  // ===== 初始化 =====
   window.addEventListener('load', () => {
       const key = localStorage.getItem('MY_GEMINI_KEY');
       if(key) document.getElementById('api-key-input').value = key;
@@ -113,74 +200,49 @@
       if(key) { localStorage.setItem('MY_GEMINI_KEY', key); alert("Key 已保存"); }
   }
 
-  // ===== WebRTC 核心修复 =====
+  // ===== WebRTC 逻辑 =====
   function initTeacherPeer() {
       peer = new Peer(null, { debug: 1 });
-
       peer.on('open', (id) => {
-          document.getElementById('connection-status-badge').innerText = "🟢 在线 (ID: " + id + ")";
+          document.getElementById('connection-status-badge').innerText = "🟢 在线";
           document.getElementById('connection-status-badge').className = "text-xs font-bold text-green-600";
           document.getElementById('classroom-id-display').innerText = `ID: ${id}`;
           
-          // 生成链接
           const baseUrl = window.location.href.replace('teacher.html', 'student.html').split('?')[0];
           const urlObj = baseUrl.endsWith('student.html') ? baseUrl : baseUrl.replace(/[^/]*$/, 'student.html');
           studentLink = `${urlObj}?t=${id}`;
           
-          // 生成二维码
           document.getElementById("qrcode").innerHTML = "";
           new QRCode(document.getElementById("qrcode"), { text: studentLink, width: 100, height: 100 });
       });
 
       peer.on('connection', (conn) => {
-          // 连接监听
-          conn.on('open', () => {
-              // 尝试从 metadata 获取，如果没有，等待第一次 handshake
-              if(conn.metadata && conn.metadata.uuid) {
-                  registerStudent(conn.metadata.uuid, conn.metadata.name, conn);
-              }
-          });
-
+          conn.on('open', () => { if(conn.metadata?.uuid) registerStudent(conn.metadata.uuid, conn.metadata.name, conn); });
           conn.on('data', (data) => {
-              // 1. 握手包 (解决名字 undefined)
-              if (data.type === 'handshake') {
-                  registerStudent(data.uuid, data.name, conn);
-              }
-              // 2. 提交包
-              if (data.type === 'submission') {
-                  conn.send({ type: 'ack', id: data.id }); // 回执
-                  handleSubmission(data);
-              }
+              if (data.type === 'handshake') registerStudent(data.uuid, data.name, conn);
+              if (data.type === 'submission') { conn.send({ type: 'ack', id: data.id }); handleSubmission(data); }
           });
-
           conn.on('close', () => updateStudentStatus(conn.metadata?.uuid, 'offline'));
           conn.on('error', () => updateStudentStatus(conn.metadata?.uuid, 'offline'));
       });
   }
 
   function registerStudent(uuid, name, conn) {
-      if(!uuid) return;
       students.set(uuid, { conn: conn, name: name || "未知同学", status: 'online' });
-      // 更新元数据以备后用
       conn.metadata = { uuid, name };
       updateStudentUI();
-      // 发送当前题目
       const topic = document.getElementById('topic-input').value;
       if(topic) conn.send({ type: 'topic', data: topic });
   }
 
   function updateStudentStatus(uuid, status) {
-      if(uuid && students.has(uuid)) {
-          students.get(uuid).status = status;
-          updateStudentUI();
-      }
+      if(uuid && students.has(uuid)) { students.get(uuid).status = status; updateStudentUI(); }
   }
 
   function updateStudentUI() {
       const list = document.getElementById('student-list');
       list.innerHTML = "";
       if(students.size === 0) { list.innerHTML = '<span class="text-gray-400 text-sm italic">等待连接...</span>'; return; }
-      
       students.forEach((s) => {
           const badge = document.createElement('div');
           badge.className = "flex items-center bg-white border border-gray-200 rounded-full px-3 py-1 text-sm shadow-sm";
@@ -192,27 +254,22 @@
 
   function copyStudentLink() {
       if(!studentLink) return alert("链接未生成");
-      navigator.clipboard.writeText(studentLink).then(() => alert("已复制链接，可发送给学生"));
+      navigator.clipboard.writeText(studentLink).then(() => alert("已复制链接"));
   }
 
   function broadcastTopic() {
       const topic = document.getElementById('topic-input').value;
-      students.forEach(s => {
-          if(s.status === 'online' && s.conn.open) s.conn.send({ type: 'topic', data: topic });
-      });
+      students.forEach(s => { if(s.status === 'online' && s.conn.open) s.conn.send({ type: 'topic', data: topic }); });
   }
 
-  // ===== 提交处理 (修复 Blob) =====
+  // ===== 处理提交 (ArrayBuffer 转 Blob) =====
   function handleSubmission(data) {
-      // data: { uuid, name, text, file: ArrayBuffer } -> 注意这里接收 ArrayBuffer
       const container = document.getElementById('submissions-list');
-      
-      // 1. 重建 Blob (修复音频无法播放的核心)
       const audioBlob = new Blob([data.file], { type: 'audio/webm' });
       const audioUrl = URL.createObjectURL(audioBlob);
-      const studentName = data.name || "未知学生"; // 使用包内名字防止 undefined
-
+      const studentName = data.name || "未知学生";
       const id = `sub-${Date.now()}`;
+
       const item = document.createElement('div');
       item.id = id;
       item.className = "bg-white p-4 rounded-lg border border-gray-200 shadow-sm flex flex-col md:flex-row gap-4 items-start animate-fade-in";
@@ -222,48 +279,72 @@
                 <span class="font-bold text-indigo-700 text-lg">${studentName}</span>
                 <span class="text-xs text-gray-400">${new Date().toLocaleTimeString()}</span>
             </div>
-            <div class="bg-gray-50 p-2 rounded text-gray-600 text-sm mb-2 italic border border-gray-100 min-h-[1.5rem]">${data.text || "(无识别文本)"}</div>
+            <div class="bg-gray-50 p-3 rounded text-gray-700 text-sm mb-2 border border-gray-100">${data.text || "(无识别文本)"}</div>
             <audio controls src="${audioUrl}" class="w-full h-8 bg-gray-100 rounded"></audio>
         </div>
         <div class="flex flex-col gap-2 mt-2 md:mt-0">
              <button onclick="analyzeSubmission('${data.uuid}', '${encodeURIComponent(data.text)}', '${studentName}')" class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-4 py-2 rounded shadow transition">
-                AI 点评
+                <i class="fas fa-magic mr-1"></i> AI 深度点评
              </button>
-             <button onclick="deleteSubmission('${id}')" class="bg-red-100 hover:bg-red-200 text-red-600 text-sm px-4 py-2 rounded transition">
-                <i class="fas fa-trash"></i> 删除
+             <button onclick="deleteSubmission('${id}')" class="bg-red-50 hover:bg-red-100 text-red-500 text-sm px-4 py-2 rounded transition">
+                <i class="fas fa-trash"></i>
              </button>
         </div>
       `;
       container.prepend(item);
   }
 
-  function deleteSubmission(id) {
-      const el = document.getElementById(id);
-      if(el) el.remove();
-  }
+  function deleteSubmission(id) { document.getElementById(id)?.remove(); }
 
-  // ===== AI 分析 =====
+  // ===== AI 分析 (核心 Prompt 优化) =====
   async function analyzeSubmission(uuid, encodedText, name) {
       const text = decodeURIComponent(encodedText);
       const topic = document.getElementById('topic-input').value;
       
       currentStudentUUID = uuid;
       document.getElementById('current-analysis-student').innerText = name;
-      document.getElementById('live-transcription-text').innerText = text;
+      
+      // UI 状态
       document.getElementById('analysis-panel').classList.remove('hidden');
       document.getElementById('analysis-panel').scrollIntoView({ behavior: 'smooth' });
-      
       const btn = document.getElementById('btn-send-feedback');
-      btn.disabled = true;
-      btn.innerText = "生成中...";
+      btn.disabled = true; btn.innerText = "正在分析中...";
+      
+      // 清空旧数据
+      document.getElementById('score-panel').classList.add('hidden');
+      document.getElementById('ai-error-tbody').innerHTML = "";
+      document.getElementById('ai-enhancement').innerText = "";
 
       const apiKey = localStorage.getItem('MY_GEMINI_KEY');
       if(!apiKey) return alert("请设置 API Key");
 
+      // --- 核心 Prompt: 严格限制 ---
       const prompt = `
-        Role: IELTS Speaking Examiner. 
-        Task: Analyze: "${text}". Topic: "${topic}".
-        Output JSON: { "score": 6.5, "cefr": "B2", "rationale": "...", "errors": [{"org":"...","fix":"..."}], "polishing": "..." }
+        Role: Strict IELTS Speaking Examiner.
+        Task: Analyze the student's speech based on the provided topic.
+        Topic: "${topic}"
+        Student Speech: "${text}"
+
+        **CRITICAL INSTRUCTIONS FOR SCORING:**
+        1. If the speech has fewer than 10 words, give a Score of 1.0 or 0.0, and in 'score_rationale' state "Too short to evaluate (语料过短，无法评分)".
+        2. Do NOT be generous. A 6.5 require complex sentences and good vocabulary.
+        3. 'expression_enhancement' MUST be different from 'score_rationale'. It must be a rewritten version of the user's speech.
+
+        **OUTPUT FORMAT**: A single JSON object with this EXACT schema:
+        {
+            "estimated_score": 5.5,
+            "cefr_level": "B1",
+            "score_rationale": "Brief assessment of fluency, vocab, grammar, and pronunciation.",
+            "error_table": [
+                { "original": "user error", "fixed": "correction", "type": "Grammar/Vocab" }
+            ],
+            "expression_enhancement": "The NATIVE speaker version of the speech. Use <mark>tag</mark> for key upgrades.",
+            "framework_practice": "A cloze test version of the enhancement. Replace <mark> content with [____] <span class='cloze-hint'>(Chinese Meaning)</span>.",
+            "vocabulary": [
+                { "phrase": "good word", "definition": "English definition" }
+            ],
+            "sample_answer": "A Band 9.0 model answer for this specific topic."
+        }
       `;
 
       try {
@@ -278,36 +359,61 @@
           
           renderAnalysis(result);
           currentAnalysisData = result;
-          btn.disabled = false;
-          btn.innerHTML = '<i class="fas fa-paper-plane mr-1"></i> 发送点评';
+          btn.disabled = false; btn.innerHTML = '<i class="fas fa-paper-plane mr-2"></i> 发送完整报告给学生';
 
       } catch(e) {
-          alert("AI 错误: " + e.message);
+          console.error(e);
+          alert("AI 分析失败: " + e.message);
           btn.innerText = "生成失败";
       }
   }
 
+  // ===== 渲染逻辑 (完全对齐 HTML 结构) =====
   function renderAnalysis(data) {
+      // 1. 评分
       document.getElementById('score-panel').classList.remove('hidden');
-      document.getElementById('score-panel').classList.add('grid');
-      document.getElementById('score-val').innerText = data.score;
-      document.getElementById('cefr-val').innerText = data.cefr;
+      document.getElementById('score-panel').classList.add('flex');
+      document.getElementById('score-val').innerText = data.estimated_score;
+      document.getElementById('cefr-val').innerText = data.cefr_level;
+      document.getElementById('score-reason').innerText = data.score_rationale;
       
-      const area = document.getElementById('ai-content-area');
-      area.innerHTML = `
-        <div class="ai-section"><div class="ai-header">改进建议</div><div class="ai-body text-sm">${data.rationale}</div></div>
-        <div class="ai-section"><div class="ai-header">纠错</div><div class="ai-body"><table class="error-table">${(data.errors||[]).map(e=>`<tr><td class="text-red-600"><del>${e.org}</del></td><td class="text-green-600">${e.fix}</td></tr>`).join('')}</table></div></div>
-        <div class="ai-section"><div class="ai-header">润色</div><div class="ai-body text-sm text-gray-700">${data.polishing}</div></div>
-      `;
+      // 2. 纠错
+      const tbody = document.getElementById('ai-error-tbody');
+      tbody.innerHTML = "";
+      if(data.error_table && data.error_table.length) {
+          data.error_table.forEach(e => {
+              tbody.innerHTML += `<tr><td class="text-red-700 bg-red-50/30"><del>${e.original}</del></td><td class="text-green-700 font-medium">${e.fixed}</td><td class="text-gray-600 text-sm">${e.type}</td></tr>`;
+          });
+      } else {
+          tbody.innerHTML = `<tr><td colspan="3" class="text-center text-gray-500 p-2">🎉 非常棒，没有明显语法错误！</td></tr>`;
+      }
+
+      // 3. 润色
+      document.getElementById('ai-enhancement').innerHTML = data.expression_enhancement || "无";
+
+      // 4. 框架
+      document.getElementById('ai-framework').innerHTML = data.framework_practice || "无";
+
+      // 5. 词汇
+      const vocabDiv = document.getElementById('ai-vocab-list');
+      vocabDiv.innerHTML = "";
+      if(data.vocabulary) {
+          data.vocabulary.forEach(v => {
+              vocabDiv.innerHTML += `<div class="vocab-tag"><strong>${v.phrase}</strong> <span class="text-xs opacity-80 border-l border-green-300 pl-2 ml-1">${v.definition}</span></div>`;
+          });
+      }
+
+      // 6. 范文
+      document.getElementById('ai-sample').innerHTML = data.sample_answer || "无";
   }
 
   function sendFeedbackToStudent() {
       const student = students.get(currentStudentUUID);
       if(student && student.conn.open) {
           student.conn.send({ type: 'feedback', data: currentAnalysisData });
-          alert("已发送给 " + student.name);
+          alert("✅ 报告已发送给 " + student.name);
       } else {
-          alert("发送失败：学生离线");
+          alert("❌ 发送失败：学生离线");
       }
   }
 </script>
