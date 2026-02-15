@@ -6,14 +6,13 @@
     <title>Student - Speaking</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         .recording-pulse { animation: pulse-red 1.5s infinite; }
         @keyframes pulse-red { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
+        /* 移动端弹窗样式优化 */
         mark { background-color: #ccfbf1; color: #0f766e; padding: 0 2px; }
-        .animate-bounce-in { animation: bounce-in 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
-        @keyframes bounce-in { 0% { transform: scale(0); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
+        .cloze-blank { border-bottom: 2px solid #ccc; display: inline-block; min-width: 30px; }
     </style>
 </head>
 <body class="bg-gray-100 min-h-screen flex flex-col items-center p-4">
@@ -25,17 +24,19 @@
 
     <div id="setup-panel" class="bg-white w-full max-w-sm rounded-xl shadow-lg p-6 mt-20 text-center hidden">
         <h2 class="text-xl font-bold mb-4 text-gray-800">English Speaking Class</h2>
-        <input type="text" id="name-input" class="w-full border-b-2 border-indigo-200 p-2 text-center text-lg outline-none mb-6 focus:border-indigo-600 transition" placeholder="Enter your name">
+        <input type="text" id="name-input" class="w-full border-b-2 border-indigo-200 p-2 text-center text-lg outline-none mb-6 focus:border-indigo-600 transition" placeholder="Enter your name (e.g., Leo)">
         <button onclick="login()" class="w-full bg-indigo-600 text-white py-3 rounded-lg font-bold shadow hover:bg-indigo-700 transition">Join Class</button>
     </div>
 
     <div id="main-panel" class="hidden w-full max-w-sm mt-16 flex flex-col gap-4 animate-fade-in">
+        
         <div class="bg-white p-4 rounded-xl shadow border-l-4 border-indigo-500">
             <h3 class="text-xs font-bold text-gray-400 uppercase mb-1">📢 Topic</h3>
             <p id="topic-display" class="text-gray-800 font-medium text-lg">Waiting for teacher...</p>
         </div>
 
         <div class="bg-white p-6 rounded-xl shadow flex flex-col items-center relative">
+            
             <div id="transcript-box" class="w-full bg-gray-50 p-3 rounded h-32 overflow-y-auto text-sm text-gray-600 mb-4 border border-gray-200">
                 (Tap microphone and speak in English...)
             </div>
@@ -46,14 +47,15 @@
                 <button id="btn-record" onclick="toggleRecord()" class="w-20 h-20 bg-red-500 rounded-full text-white text-3xl shadow-lg flex items-center justify-center transition active:scale-95">
                     <i class="fas fa-microphone"></i>
                 </button>
-                <button id="btn-send" onclick="sendDataSafe()" class="hidden w-20 h-20 bg-green-500 rounded-full text-white text-3xl shadow-lg flex items-center justify-center transition active:scale-95 animate-bounce-in">
+                <button id="btn-send" onclick="sendDataChunked()" class="hidden w-20 h-20 bg-green-500 rounded-full text-white text-3xl shadow-lg flex items-center justify-center transition active:scale-95 animate-bounce-in">
                     <i class="fas fa-paper-plane"></i>
                 </button>
             </div>
+            <p id="hint" class="text-xs text-gray-400 mt-4">Tap red button to start</p>
             
             <div id="progress-container" class="w-full mt-4 hidden">
-                <div class="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
-                    <div id="progress-bar" class="bg-green-600 h-2.5 rounded-full w-0 transition-all duration-100"></div>
+                <div class="w-full bg-gray-200 rounded-full h-2.5">
+                    <div id="progress-bar" class="bg-green-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
                 </div>
                 <p id="progress-text" class="text-xs text-center mt-1 text-gray-500">Preparing...</p>
             </div>
@@ -61,12 +63,14 @@
     </div>
 
     <div id="feedback-modal" class="fixed inset-0 bg-black bg-opacity-70 hidden flex items-center justify-center p-4 z-50">
-        <div id="feedback-content" class="bg-white w-full max-w-sm rounded-xl overflow-hidden shadow-2xl h-[85vh] flex flex-col">
+        <div class="bg-white w-full max-w-sm rounded-xl overflow-hidden shadow-2xl h-[80vh] flex flex-col">
             <div class="bg-indigo-600 p-4 text-white font-bold flex justify-between items-center flex-shrink-0">
                 <span><i class="fas fa-clipboard-check mr-2"></i> Teacher's Report</span>
                 <button onclick="closeModal()"><i class="fas fa-times text-xl"></i></button>
             </div>
-            <div class="p-4 overflow-y-auto flex-1 space-y-6 bg-white">
+            
+            <div class="p-4 overflow-y-auto flex-1 space-y-6">
+                
                 <div class="flex justify-center gap-8 border-b pb-4">
                     <div class="text-center">
                         <div class="text-4xl font-extrabold text-indigo-600" id="fb-score">--</div>
@@ -77,30 +81,33 @@
                         <div class="text-xs text-gray-500 uppercase font-bold mt-1">Level</div>
                     </div>
                 </div>
+                
                 <div>
                     <h4 class="font-bold text-gray-800 mb-1">📝 Summary</h4>
                     <div class="bg-gray-50 p-3 rounded text-sm text-gray-700" id="fb-rationale"></div>
                 </div>
+
                 <div>
                     <h4 class="font-bold text-blue-700 mb-1">✨ Native Polish</h4>
                     <div class="bg-blue-50 p-3 rounded text-sm text-gray-700 leading-relaxed" id="fb-enhancement"></div>
                 </div>
+
                 <div>
                     <h4 class="font-bold text-red-700 mb-1">🛠 Corrections</h4>
                     <div class="bg-red-50 p-3 rounded text-sm overflow-x-auto">
                         <table class="w-full text-left" id="fb-errors"></table>
                     </div>
                 </div>
+
                 <div>
                     <h4 class="font-bold text-purple-700 mb-1">🌟 Model Answer</h4>
                     <div class="bg-purple-50 p-3 rounded text-sm text-gray-700 italic" id="fb-sample"></div>
                 </div>
+
             </div>
-            <div class="p-3 border-t bg-gray-50 text-center flex-shrink-0 flex gap-2 justify-center" id="modal-footer">
-                <button onclick="saveFeedbackImage()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-full text-sm font-bold shadow flex items-center transition">
-                    <i class="fas fa-camera mr-2"></i> Save Image
-                </button>
-                <button onclick="closeModal()" class="bg-gray-800 hover:bg-gray-900 text-white px-6 py-2 rounded-full text-sm font-bold shadow transition">Close</button>
+            
+            <div class="p-3 border-t bg-gray-50 text-center flex-shrink-0">
+                <button onclick="closeModal()" class="bg-gray-800 text-white px-8 py-2 rounded-full text-sm font-bold shadow">Close Report</button>
             </div>
         </div>
     </div>
@@ -108,10 +115,14 @@
 <script>
     const urlParams = new URLSearchParams(window.location.search);
     const teacherId = urlParams.get('t');
-    let peer, conn;
+    let peer = null;
+    let conn = null;
     let myUUID = localStorage.getItem('stu_uuid') || 'stu_'+Date.now();
     let myName = localStorage.getItem('stu_name') || "";
-    let mediaRecorder, audioChunks = [], recognition, isRecording = false, timerInterval;
+    
+    let mediaRecorder, audioChunks = [], recognition;
+    let isRecording = false;
+    let timerInterval;
     let finalTranscript = ""; 
 
     window.addEventListener('load', () => {
@@ -147,7 +158,10 @@
             });
             conn.on('data', (msg) => {
                 if(msg.type === 'topic') document.getElementById('topic-display').innerText = msg.data;
-                if(msg.type === 'ack') completeUpload(); // 收到ACK，上传成功
+                // 收到 ACK 才是真的成功
+                if(msg.type === 'ack') { 
+                    completeUpload();
+                }
                 if(msg.type === 'feedback') showFeedback(msg.data);
             });
             conn.on('close', () => updateStatus("🔴 Disconnected", "bg-red-600"));
@@ -160,6 +174,7 @@
         el.parentElement.className = `fixed top-0 left-0 w-full text-white text-xs p-2 flex justify-between px-4 z-50 shadow-md ${bg}`;
     }
 
+    // --- 录音逻辑 ---
     async function toggleRecord() {
         if(!isRecording) {
             try {
@@ -167,22 +182,27 @@
                 startRecording(stream);
                 startTimer();
                 isRecording = true;
+                
                 const btn = document.getElementById('btn-record');
                 btn.innerHTML = '<i class="fas fa-stop"></i>';
                 btn.className = "w-20 h-20 bg-gray-800 rounded-full text-white text-3xl shadow-lg flex items-center justify-center recording-pulse";
                 document.getElementById('btn-send').classList.add('hidden');
                 document.getElementById('timer').classList.replace('text-gray-300', 'text-gray-800');
+                
                 finalTranscript = "";
                 document.getElementById('transcript-box').innerText = "";
-            } catch(e) { alert("Microphone denied. Use HTTPS."); }
+                
+            } catch(e) { alert("Microphone access denied. Please use HTTPS."); }
         } else {
             stopRecording();
             stopTimer();
             isRecording = false;
+            
             const btn = document.getElementById('btn-record');
             btn.innerHTML = '<i class="fas fa-redo"></i>';
             btn.className = "w-20 h-20 bg-gray-400 rounded-full text-white text-3xl shadow-lg flex items-center justify-center";
             document.getElementById('btn-send').classList.remove('hidden');
+            document.getElementById('hint').innerText = "Send or tap gray button to retry";
         }
     }
 
@@ -196,9 +216,10 @@
         if('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             recognition = new SpeechRecognition();
-            recognition.lang = 'en-US'; 
-            recognition.continuous = true; 
+            recognition.lang = 'en-US'; // 强制英文
+            recognition.continuous = true;
             recognition.interimResults = true;
+            
             recognition.onresult = e => {
                 let interim = "";
                 for(let i=e.resultIndex; i<e.results.length; ++i) {
@@ -207,6 +228,7 @@
                 }
                 document.getElementById('transcript-box').innerText = finalTranscript + interim;
             };
+            // 自动重启防止断连
             recognition.onend = () => { if(isRecording) recognition.start(); };
             try { recognition.start(); } catch(e){}
         }
@@ -217,78 +239,83 @@
         if(recognition) { recognition.onend = null; recognition.stop(); }
     }
 
-    // ===== 核心修改：安全极速切片发送逻辑 =====
-    async function sendDataSafe() {
+    // --- 分片传输逻辑 (解决转圈/虚高问题) ---
+    function sendDataChunked() {
         if(!conn || !conn.open) return alert("Not connected to teacher");
         
-        document.getElementById('btn-send').classList.add('hidden');
-        document.getElementById('progress-container').classList.remove('hidden');
-        document.getElementById('progress-text').innerText = "Preparing...";
-
-        // 1. 转换 Blob 为 ArrayBuffer
         const blob = new Blob(audioChunks, { type: 'audio/webm' });
         const text = document.getElementById('transcript-box').innerText;
-        const buffer = await blob.arrayBuffer();
-        const totalSize = buffer.byteLength;
+        
+        const btn = document.getElementById('btn-send');
+        btn.classList.add('hidden');
+        document.getElementById('progress-container').classList.remove('hidden');
+        
         const transferId = Date.now().toString();
-
-        // 2. 发送开始信号
-        conn.send({
-            type: 'tx-start',
-            id: transferId,
-            size: totalSize,
-            name: myName,
-            uuid: myUUID,
-            text: text
-        });
-
-        // 3. 极速切片循环 (无 setTimeout)
-        // 16KB 是 WebRTC 安全的 chunk 大小，防止 buffer 溢出导致连接断开
-        const CHUNK_SIZE = 16 * 1024; 
+        const CHUNK_SIZE = 16 * 1024; // 16KB per chunk
         let offset = 0;
-
-        document.getElementById('progress-text').innerText = "Sending...";
         
-        while (offset < totalSize) {
-            const chunk = buffer.slice(offset, offset + CHUNK_SIZE);
-            conn.send({
-                type: 'tx-chunk',
-                id: transferId,
-                data: chunk
-            });
-            offset += CHUNK_SIZE;
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            const buffer = e.target.result;
+            const totalSize = buffer.byteLength;
             
-            // 更新进度条 (每10个chunk更新一次UI，避免卡顿)
-            if(offset % (CHUNK_SIZE * 10) === 0 || offset >= totalSize) {
-                const percent = Math.min(95, Math.round((offset / totalSize) * 100));
-                document.getElementById('progress-bar').style.width = percent + "%";
-            }
-        }
+            // 1. Start Info
+            conn.send({
+                type: 'file-start',
+                transferId: transferId,
+                totalSize: totalSize,
+                mimeType: 'audio/webm',
+                meta: { uuid: myUUID, name: myName, text: text }
+            });
 
-        // 4. 发送结束信号
-        conn.send({ type: 'tx-end', id: transferId });
-        
-        document.getElementById('progress-text').innerText = "Verifying with server... (Do not close)";
-        document.getElementById('progress-bar').classList.add('animate-pulse');
+            // 2. Chunks Loop
+            function sendNextChunk() {
+                if(offset < totalSize) {
+                    const chunk = buffer.slice(offset, offset + CHUNK_SIZE);
+                    conn.send({
+                        type: 'file-chunk',
+                        transferId: transferId,
+                        chunk: chunk
+                    });
+                    
+                    offset += CHUNK_SIZE;
+                    const percent = Math.min(99, Math.round((offset / totalSize) * 100)); // Cap at 99%
+                    
+                    document.getElementById('progress-bar').style.width = percent + "%";
+                    document.getElementById('progress-text').innerText = `Uploading... ${percent}%`;
+                    
+                    // 增加延时防止 buffer 溢出
+                    setTimeout(sendNextChunk, 15); 
+                } else {
+                    // 3. Finish sending
+                    conn.send({ type: 'file-end', transferId: transferId });
+                    // UI Change: Wait for ACK
+                    document.getElementById('progress-text').innerText = "Verifying with server... (Do not close)";
+                    document.getElementById('progress-bar').classList.add('animate-pulse');
+                }
+            }
+            sendNextChunk();
+        };
+        reader.readAsArrayBuffer(blob);
     }
 
     function completeUpload() {
         document.getElementById('progress-bar').style.width = "100%";
         document.getElementById('progress-bar').classList.remove('animate-pulse');
         document.getElementById('progress-text').innerText = "Done!";
-        setTimeout(() => {
-            alert("✅ Sent Successfully!");
-            resetUI();
-        }, 500);
+        alert("✅ Sent Successfully!");
+        resetUI();
     }
 
     function resetUI() {
         document.getElementById('transcript-box').innerText = "(Tap microphone...)";
         document.getElementById('progress-container').classList.add('hidden');
         document.getElementById('progress-bar').style.width = "0%";
+        
         const btn = document.getElementById('btn-record');
         btn.innerHTML = '<i class="fas fa-microphone"></i>';
         btn.className = "w-20 h-20 bg-red-500 rounded-full text-white text-3xl shadow-lg flex items-center justify-center";
+        
         document.getElementById('timer').innerText = "00:00";
         document.getElementById('timer').classList.replace('text-gray-800', 'text-gray-300');
     }
@@ -305,38 +332,23 @@
     }
     function stopTimer() { clearInterval(timerInterval); }
 
+    // --- 全量反馈展示 ---
     function showFeedback(data) {
         document.getElementById('fb-score').innerText = data.estimated_score;
         document.getElementById('fb-cefr').innerText = data.cefr_level;
         document.getElementById('fb-rationale').innerText = data.score_rationale;
         document.getElementById('fb-enhancement').innerHTML = data.expression_enhancement;
         document.getElementById('fb-sample').innerText = data.sample_answer;
+        
         const errTable = document.getElementById('fb-errors');
         errTable.innerHTML = "";
         (data.error_table || []).forEach(e => {
             errTable.innerHTML += `<tr class="border-b border-red-100"><td class="py-1 text-red-600"><del>${e.original}</del></td><td class="py-1 text-green-600">${e.fixed}</td></tr>`;
         });
+
         document.getElementById('feedback-modal').classList.remove('hidden');
     }
-    
     function closeModal() { document.getElementById('feedback-modal').classList.add('hidden'); }
-
-    function saveFeedbackImage() {
-        const modalContent = document.getElementById('feedback-content');
-        const footer = document.getElementById('modal-footer');
-        const originalDisplay = footer.style.display;
-        footer.style.display = 'none';
-        html2canvas(modalContent, { scale: 2, useCORS: true, backgroundColor: "#ffffff" }).then(canvas => {
-            footer.style.display = originalDisplay;
-            const link = document.createElement('a');
-            link.download = `Report_${myName}_${Date.now()}.png`;
-            link.href = canvas.toDataURL("image/png");
-            link.click();
-        }).catch(err => {
-            footer.style.display = originalDisplay;
-            alert("Save failed, please screenshot manually.");
-        });
-    }
 </script>
 </body>
 </html>
