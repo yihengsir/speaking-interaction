@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -15,7 +15,7 @@
 <body class="bg-gray-100 min-h-screen flex flex-col items-center p-4">
 
     <div class="fixed top-0 left-0 w-full bg-gray-900 text-white text-xs p-2 flex justify-between px-4 z-50 shadow-md">
-        <span id="conn-status"><i class="fas fa-spinner fa-spin"></i> 连接中...</span>
+        <span id="conn-status"><i class="fas fa-spinner fa-spin"></i> Connecting...</span>
         <span id="my-name-display" class="font-bold text-yellow-400"></span>
     </div>
 
@@ -33,6 +33,7 @@
         </div>
 
         <div class="bg-white p-6 rounded-xl shadow flex flex-col items-center relative">
+            
             <div id="transcript-box" class="w-full bg-gray-50 p-3 rounded h-32 overflow-y-auto text-sm text-gray-600 mb-4 border border-gray-200">
                 (Tap microphone and speak in English...)
             </div>
@@ -43,11 +44,18 @@
                 <button id="btn-record" onclick="toggleRecord()" class="w-20 h-20 bg-red-500 rounded-full text-white text-3xl shadow-lg flex items-center justify-center transition active:scale-95">
                     <i class="fas fa-microphone"></i>
                 </button>
-                <button id="btn-send" onclick="sendData()" class="hidden w-20 h-20 bg-green-500 rounded-full text-white text-3xl shadow-lg flex items-center justify-center transition active:scale-95 animate-bounce-in">
+                <button id="btn-send" onclick="sendDataChunked()" class="hidden w-20 h-20 bg-green-500 rounded-full text-white text-3xl shadow-lg flex items-center justify-center transition active:scale-95 animate-bounce-in">
                     <i class="fas fa-paper-plane"></i>
                 </button>
             </div>
             <p id="hint" class="text-xs text-gray-400 mt-4">Tap red button to start</p>
+            
+            <div id="progress-container" class="w-full mt-4 hidden">
+                <div class="w-full bg-gray-200 rounded-full h-2.5">
+                    <div id="progress-bar" class="bg-green-600 h-2.5 rounded-full" style="width: 0%"></div>
+                </div>
+                <p id="progress-text" class="text-xs text-center mt-1 text-gray-500">Sending...</p>
+            </div>
         </div>
     </div>
 
@@ -68,8 +76,7 @@
                         <div class="text-xs text-gray-500 uppercase font-bold mt-1">Level</div>
                     </div>
                 </div>
-                <div class="bg-gray-50 p-3 rounded text-sm text-gray-700 text-left mb-4 max-h-40 overflow-y-auto" id="fb-rationale">
-                </div>
+                <div class="bg-gray-50 p-3 rounded text-sm text-gray-700 text-left mb-4 max-h-40 overflow-y-auto" id="fb-rationale"></div>
                 <button onclick="closeModal()" class="bg-gray-800 text-white px-6 py-2 rounded-full text-sm font-bold">Close</button>
             </div>
         </div>
@@ -80,13 +87,16 @@
     const teacherId = urlParams.get('t');
     let peer = null;
     let conn = null;
-    // 自动生成或读取 UUID
     let myUUID = localStorage.getItem('stu_uuid') || 'stu_'+Date.now();
     let myName = localStorage.getItem('stu_name') || "";
     
-    let mediaRecorder, audioChunks = [], recognition, isRecording = false, timerInterval;
+    let mediaRecorder, audioChunks = [], recognition;
+    let isRecording = false;
+    let timerInterval;
+    
+    // Transcript Accumulator (Fix for missing text)
+    let finalTranscript = ""; 
 
-    // 初始化
     window.addEventListener('load', () => {
         localStorage.setItem('stu_uuid', myUUID);
         if(myName) loginDirect();
@@ -111,25 +121,22 @@
     function initPeer() {
         if(!teacherId) return updateStatus("❌ Invalid Link", "bg-red-600");
         updateStatus("🔄 Connecting...", "bg-yellow-600");
-        
         peer = new Peer();
         peer.on('open', () => {
-            // 连接老师
             conn = peer.connect(teacherId, { metadata: { uuid: myUUID, name: myName } });
-            
             conn.on('open', () => {
                 updateStatus("✅ Connected", "bg-green-600");
                 conn.send({ type: 'handshake', uuid: myUUID, name: myName });
             });
-
             conn.on('data', (msg) => {
                 if(msg.type === 'topic') document.getElementById('topic-display').innerText = msg.data;
-                if(msg.type === 'ack') { alert("✅ Sent Successfully!"); resetUI(); }
+                if(msg.type === 'ack') { 
+                    alert("✅ Sent Successfully!"); 
+                    resetUI(); 
+                }
                 if(msg.type === 'feedback') showFeedback(msg.data);
             });
-
             conn.on('close', () => updateStatus("🔴 Disconnected", "bg-red-600"));
-            conn.on('error', () => updateStatus("⚠️ Error", "bg-red-600"));
         });
     }
 
@@ -139,7 +146,7 @@
         el.parentElement.className = `fixed top-0 left-0 w-full text-white text-xs p-2 flex justify-between px-4 z-50 shadow-md ${bg}`;
     }
 
-    // --- 录音逻辑 (核心修改：英文识别) ---
+    // --- Recording Logic ---
     async function toggleRecord() {
         if(!isRecording) {
             try {
@@ -148,19 +155,22 @@
                 startTimer();
                 isRecording = true;
                 
-                // UI 变化
                 const btn = document.getElementById('btn-record');
                 btn.innerHTML = '<i class="fas fa-stop"></i>';
                 btn.className = "w-20 h-20 bg-gray-800 rounded-full text-white text-3xl shadow-lg flex items-center justify-center recording-pulse";
                 document.getElementById('btn-send').classList.add('hidden');
                 document.getElementById('timer').classList.replace('text-gray-300', 'text-gray-800');
+                
+                // Clear previous text
+                finalTranscript = "";
+                document.getElementById('transcript-box').innerText = "";
+                
             } catch(e) { alert("Microphone access denied. Please use HTTPS."); }
         } else {
             stopRecording();
             stopTimer();
             isRecording = false;
             
-            // UI 变化
             const btn = document.getElementById('btn-record');
             btn.innerHTML = '<i class="fas fa-redo"></i>';
             btn.className = "w-20 h-20 bg-gray-400 rounded-full text-white text-3xl shadow-lg flex items-center justify-center";
@@ -171,63 +181,117 @@
 
     function startRecording(stream) {
         audioChunks = [];
-        // 优先使用 audio/webm
         const options = MediaRecorder.isTypeSupported('audio/webm') ? { mimeType: 'audio/webm' } : {};
         mediaRecorder = new MediaRecorder(stream, options);
         mediaRecorder.ondataavailable = e => { if(e.data.size > 0) audioChunks.push(e.data); };
         mediaRecorder.start();
 
-        // --- 核心修改：仅识别英文 ---
+        // --- Improved Speech Recognition (Accumulation + Auto Restart) ---
         if('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             recognition = new SpeechRecognition();
-            recognition.lang = 'en-US'; // 强制英文
+            recognition.lang = 'en-US'; // Strict English
             recognition.continuous = true;
             recognition.interimResults = true;
+            
             recognition.onresult = e => {
-                let txt = "";
-                for(let i=e.resultIndex; i<e.results.length; ++i) txt += e.results[i][0].transcript;
-                document.getElementById('transcript-box').innerText = txt;
+                let interim = "";
+                for(let i=e.resultIndex; i<e.results.length; ++i) {
+                    if(e.results[i].isFinal) {
+                        finalTranscript += e.results[i][0].transcript + " ";
+                    } else {
+                        interim += e.results[i][0].transcript;
+                    }
+                }
+                document.getElementById('transcript-box').innerText = finalTranscript + interim;
             };
-            recognition.start();
+
+            // Auto-restart if stopped unexpectedly while recording
+            recognition.onend = () => {
+                if(isRecording) recognition.start();
+            };
+            
+            try { recognition.start(); } catch(e){}
         }
     }
 
     function stopRecording() {
         if(mediaRecorder) { mediaRecorder.stop(); mediaRecorder.stream.getTracks().forEach(t=>t.stop()); }
-        if(recognition) recognition.stop();
+        if(recognition) {
+            recognition.onend = null; // Prevent auto-restart
+            recognition.stop();
+        }
     }
 
-    function sendData() {
+    // --- Chunked Sending (Fix for spinning/slow) ---
+    function sendDataChunked() {
         if(!conn || !conn.open) return alert("Not connected to teacher");
         
         const blob = new Blob(audioChunks, { type: 'audio/webm' });
         const text = document.getElementById('transcript-box').innerText;
-
-        // 使用 ArrayBuffer 传输录音，解决播放问题
+        
+        // Show progress UI
+        const btn = document.getElementById('btn-send');
+        btn.classList.add('hidden');
+        document.getElementById('progress-container').classList.remove('hidden');
+        
+        const transferId = Date.now().toString();
+        const CHUNK_SIZE = 16 * 1024; // 16KB chunks are safe for PeerJS
+        let offset = 0;
+        
+        // Convert Blob to ArrayBuffer first
         const reader = new FileReader();
-        reader.onload = function(evt) {
-            const buffer = evt.target.result;
+        reader.onload = async (e) => {
+            const buffer = e.target.result;
+            const totalSize = buffer.byteLength;
+            
+            // 1. Send Start Metadata
             conn.send({
-                type: 'submission',
-                id: Date.now(),
-                uuid: myUUID,
-                name: myName,
-                text: text,
-                file: buffer
+                type: 'file-start',
+                transferId: transferId,
+                totalSize: totalSize,
+                mimeType: 'audio/webm',
+                meta: { uuid: myUUID, name: myName, text: text }
             });
-            document.getElementById('btn-send').innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+            // 2. Loop and send chunks
+            function sendNextChunk() {
+                if(offset < totalSize) {
+                    const chunk = buffer.slice(offset, offset + CHUNK_SIZE);
+                    conn.send({
+                        type: 'file-chunk',
+                        transferId: transferId,
+                        chunk: chunk
+                    });
+                    
+                    offset += CHUNK_SIZE;
+                    // Update UI
+                    const percent = Math.min(100, Math.round((offset / totalSize) * 100));
+                    document.getElementById('progress-bar').style.width = percent + "%";
+                    document.getElementById('progress-text').innerText = `Sending... ${percent}%`;
+                    
+                    // Use setTimeout to prevent blocking UI thread
+                    setTimeout(sendNextChunk, 10); 
+                } else {
+                    // 3. Send End
+                    conn.send({ type: 'file-end', transferId: transferId });
+                }
+            }
+            
+            sendNextChunk();
         };
         reader.readAsArrayBuffer(blob);
     }
 
     function resetUI() {
         document.getElementById('transcript-box').innerText = "(Tap microphone...)";
-        document.getElementById('btn-send').classList.add('hidden');
-        document.getElementById('btn-send').innerHTML = '<i class="fas fa-paper-plane"></i>';
+        document.getElementById('progress-container').classList.add('hidden');
+        document.getElementById('progress-bar').style.width = "0%";
+        
         const btn = document.getElementById('btn-record');
         btn.innerHTML = '<i class="fas fa-microphone"></i>';
         btn.className = "w-20 h-20 bg-red-500 rounded-full text-white text-3xl shadow-lg flex items-center justify-center";
+        
         document.getElementById('timer').innerText = "00:00";
         document.getElementById('timer').classList.replace('text-gray-800', 'text-gray-300');
     }
