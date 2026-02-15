@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>雅思口语 AI 课堂 - 教师端</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <style>
+    body { font-family: ui-sans-serif, system-ui, sans-serif; background-color: #f3f4f6; }
+    .main-container { min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 1rem; }
+    .card { background-color: white; padding: 2rem; border-radius: 1rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 60rem; width: 100%; }
+    
+    /* 文本显示区域 */
+    .text-display { 
+      min-height: 8rem; max-height: 20rem; background-color: #f9fafb; 
+      border: 1px solid #e5e7eb; border-radius: 0.5rem; padding: 1rem; 
+      overflow-y: auto; white-space: pre-wrap; line-height: 1.8; font-size: 1.125rem;
+    }
+    .text-display:focus { outline: 2px solid #6366f1; background-color: #fff; }
+
+    /* 高亮与润色 */
+    mark { background-color: #ccfbf1; color: #0f766e; padding: 0.15em 0.3em; margin: 0 0.1em; border-radius: 4px; font-weight: 600; border-bottom: 2px solid #2dd4bf; }
+    
+    /* 评分卡与AI区域 */
+    .ai-section { margin-top: 1.5rem; border: 1px solid #e5e7eb; border-radius: 0.75rem; overflow: hidden; }
+    .ai-header { background-color: #f3f4f6; padding: 0.75rem 1rem; font-weight: 700; color: #374151; border-bottom: 1px solid #e5e7eb; }
+    .ai-body { padding: 1rem; background-color: #fff; }
+    
+    .score-card { display: flex; flex-direction: column; align-items: center; background: linear-gradient(135deg, #fff, #fefaff); border: 1px solid #e9d5ff; border-radius: 1rem; padding: 1.5rem; margin-bottom: 2rem; }
+    @media (min-width: 768px) { .score-card { flex-direction: row; justify-content: space-around; } }
+    .score-value { font-size: 2.5rem; font-weight: 800; color: #4f46e5; }
+    
+    /* 表格 */
+    .error-table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+    .error-table th { text-align: left; padding: 0.75rem; background-color: #fef2f2; color: #991b1b; }
+    .error-table td { padding: 0.75rem; border-bottom: 1px solid #f3f4f6; }
+    .error-table del { color: #b91c1c; background-color: #fee2e2; padding: 0 4px; }
+
+    /* 班课模式样式 */
+    .student-card { transition: all 0.3s ease; border-left: 4px solid #6366f1; }
+    .student-card:hover { transform: translateY(-2px); box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+  </style>
+</head>
+<body>
+
+<main class="main-container">
+  <div class="card">
+    <div class="flex justify-between items-center mb-6 border-b pb-4">
+        <h1 class="text-2xl font-bold text-gray-800"><i class="fas fa-chalkboard-teacher mr-2 text-indigo-600"></i>雅思口语 AI 课堂</h1>
+        <div class="text-xs text-gray-500">Teacher Console</div>
+    </div>
+
+    <div class="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+        <div class="flex justify-between items-center mb-2">
+            <label class="font-bold text-yellow-800"><i class="fas fa-key mr-1"></i> API Key 设置</label>
+            <span class="text-xs text-yellow-600" id="key-status">未检测到 Key</span>
+        </div>
+        <div class="flex gap-2">
+            <input type="password" id="api-key-input" class="flex-1 p-2 border border-yellow-300 rounded text-sm" placeholder="粘贴 Google Gemini API Key (自动保存到本地)" />
+            <button onclick="saveApiKey()" class="bg-yellow-600 text-white px-4 py-1 rounded text-sm hover:bg-yellow-700">保存</button>
+        </div>
+    </div>
+
+    <div class="mb-8 bg-indigo-50 border border-indigo-200 rounded-lg p-6">
+        <h3 class="font-bold text-indigo-800 mb-4 text-lg"><i class="fas fa-users mr-2"></i>班课模式：学生扫码加入</h3>
+        
+        <div class="flex flex-col md:flex-row gap-8 items-start">
+            <div class="bg-white p-3 rounded shadow-sm flex-shrink-0 mx-auto md:mx-0">
+                <div id="qrcode"></div>
+                <p class="text-center text-xs text-gray-500 mt-2">扫码进入录音室</p>
+            </div>
+            
+            <div class="flex-1 w-full">
+                <div class="mb-2 flex justify-between">
+                    <span class="font-bold text-gray-700">在线学生:</span>
+                    <span id="classroom-id-display" class="text-xs text-gray-400 font-mono">ID: 初始化中...</span>
+                </div>
+                <div id="student-list" class="flex flex-wrap gap-2 min-h-[40px] p-2 bg-white rounded border border-indigo-100">
+                    <span class="text-gray-400 text-sm italic p-1">等待学生连接...</span>
+                </div>
+                
+                <div class="mt-4 text-sm text-indigo-700 bg-indigo-100 p-2 rounded">
+                    <i class="fas fa-info-circle mr-1"></i> 
+                    学生扫码 -> 手机录音 -> 点击发送 -> 录音和文字会直接显示在下方列表。
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mb-6">
+        <label class="block text-gray-700 font-bold mb-2">📌 当前题目 (用于 AI 评分参照)</label>
+        <textarea id="topic-input" class="w-full p-3 border border-gray-300 rounded-lg text-sm" rows="2" placeholder="输入题目，例如：Describe a time you were busy..."></textarea>
+    </div>
+
+    <div id="submission-area" class="mb-8">
+        <h3 class="font-bold text-gray-800 mb-3 border-l-4 border-green-500 pl-3">📥 学生提交记录 (最新在最前)</h3>
+        <div id="submissions-list" class="space-y-4">
+            </div>
+    </div>
+
+    <hr class="my-8 border-gray-200">
+
+    <div id="analysis-panel" class="hidden animate-fade-in">
+        <div class="flex justify-between items-center mb-4">
+             <h2 class="text-xl font-bold text-gray-800">📊 AI 分析报告: <span id="current-analysis-student" class="text-indigo-600">--</span></h2>
+             <button onclick="scrollToTop()" class="text-sm text-gray-500 underline">返回顶部</button>
+        </div>
+
+        <div class="mb-4">
+            <p class="text-xs text-gray-500 mb-1">原文内容:</p>
+            <div id="live-transcription-text" class="p-3 bg-gray-50 rounded border text-gray-800 italic"></div>
+        </div>
+
+        <div id="score-panel" class="score-card hidden">
+           <div class="text-center">
+               <div class="score-value" id="score-val">--</div>
+               <div class="text-xs text-gray-500 font-bold uppercase">IELTS Band</div>
+           </div>
+           <div class="h-px w-full md:w-px md:h-12 bg-gray-300 my-2 md:my-0"></div>
+           <div class="text-center">
+               <div class="score-value text-purple-600" id="cefr-val">--</div>
+               <div class="text-xs text-gray-500 font-bold uppercase">CEFR Level</div>
+           </div>
+           <div class="h-px w-full md:w-px md:h-12 bg-gray-300 my-2 md:my-0"></div>
+           <div class="flex-1 px-4 text-sm text-gray-600 italic" id="score-reason">AI 分析中...</div>
+        </div>
+
+        <div class="ai-section border-red-200 mb-4">
+          <div class="ai-header bg-red-50 text-red-800"><i class="fas fa-bug mr-2"></i>语法纠错</div>
+          <div class="ai-body p-0 overflow-x-auto">
+             <table class="error-table">
+               <thead><tr><th class="w-1/3">❌ 原文</th><th class="w-1/3">✅ 修改</th><th class="w-1/3">💡 说明</th></tr></thead>
+               <tbody id="ai-error-tbody"></tbody>
+             </table>
+          </div>
+        </div>
+
+        <div class="ai-section border-blue-200 mb-4">
+          <div class="ai-header bg-blue-50 text-blue-800"><i class="fas fa-magic mr-2"></i>地道润色</div>
+           <div class="ai-body text-gray-700 whitespace-pre-wrap leading-loose" id="ai-enhancement"></div>
+        </div>
+        
+        <div class="ai-section border-purple-200">
+          <div class="ai-header bg-purple-50 text-purple-800"><i class="fas fa-star mr-2"></i>满分范文 (基于原意)</div>
+          <div class="ai-body text-gray-700 whitespace-pre-wrap" id="ai-sample"></div>
+        </div>
+    </div>
+
+  </div>
+</main>
+
+<script>
+  // ===== 全局配置 =====
+  const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+  let peer = null;
+  
+  // ===== 1. API Key 管理 (本地存储) =====
+  function loadApiKey() {
+      const key = localStorage.getItem('MY_GEMINI_KEY');
+      if(key) {
+          document.getElementById('api-key-input').value = key; // 回填
+          document.getElementById('key-status').innerText = "✅ 已加载本地 Key";
+          document.getElementById('key-status').className = "text-xs text-green-600 font-bold";
+      }
+  }
+
+  function saveApiKey() {
+      const key = document.getElementById('api-key-input').value.trim();
+      if(!key) return alert("Key 不能为空");
+      localStorage.setItem('MY_GEMINI_KEY', key);
+      document.getElementById('key-status').innerText = "✅ 保存成功";
+      document.getElementById('key-status').className = "text-xs text-green-600 font-bold";
+      alert("Key 已保存到浏览器本地！");
+  }
+
+  // ===== 2. 班课 PeerJS 逻辑 =====
+  function initClassroom() {
+      // 创建 Peer，使用官方免费服务器
+      peer = new Peer(null, { debug: 1 });
+
+      peer.on('open', (id) => {
+          document.getElementById('classroom-id-display').innerText = `ID: ${id}`;
+          
+          // 生成学生端链接 (假设 student.html 在同一目录下)
+          const baseUrl = window.location.href.replace('teacher.html', 'student.html').split('?')[0];
+          // 如果文件名不是teacher.html，尝试智能替换或直接附加参数
+          let studentUrl = baseUrl.endsWith('student.html') ? baseUrl : baseUrl.replace(/[^/]*$/, 'student.html');
+          
+          const finalLink = `${studentUrl}?t=${id}`;
+          
+          console.log("Student Link:", finalLink);
+
+          // 生成二维码
+          document.getElementById('qrcode').innerHTML = "";
+          new QRCode(document.getElementById("qrcode"), {
+              text: finalLink,
+              width: 128,
+              height: 128
+          });
+      });
+
+      peer.on('connection', (conn) => {
+          conn.on('open', () => {
+              const studentName = conn.metadata?.name || "未知同学";
+              addStudentBadge(studentName);
+          });
+
+          conn.on('data', (data) => {
+              if (data.type === 'submission') {
+                  handleSubmission(data);
+              }
+          });
+      });
+  }
+
+  function addStudentBadge(name) {
+      const list = document.getElementById('student-list');
+      if(list.innerText.includes("等待学生连接")) list.innerHTML = "";
+      
+      const badge = document.createElement('span');
+      badge.className = "bg-green-100 text-green-800 text-xs px-2 py-1 rounded border border-green-200 flex items-center";
+      badge.innerHTML = `<i class="fas fa-user mr-1"></i> ${name}`;
+      list.appendChild(badge);
+  }
+
+  function handleSubmission(data) {
+      // data: { name, text, blob (ArrayBuffer), timestamp }
+      const container = document.getElementById('submissions-list');
+      
+      // 创建 Blob URL
+      const audioBlob = new Blob([data.blob], { type: 'audio/webm' });
+      const audioUrl = URL.createObjectURL(audioBlob);
+      
+      const card = document.createElement('div');
+      card.className = "student-card bg-white p-4 rounded shadow-sm border border-gray-100 relative";
+      card.innerHTML = `
+        <div class="flex justify-between items-start mb-2">
+            <div>
+                <span class="font-bold text-lg text-indigo-700">${data.name}</span>
+                <span class="text-xs text-gray-400 ml-2">${new Date().toLocaleTimeString()}</span>
+            </div>
+            <button onclick="analyzeThis('${data.name}', this)" class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-3 py-1.5 rounded shadow transition-transform active:scale-95">
+                <i class="fas fa-microchip mr-1"></i> AI 深度点评此条
+            </button>
+        </div>
+        
+        <div class="mb-3">
+            <audio controls src="${audioUrl}" class="w-full h-8"></audio>
+        </div>
+        
+        <div class="bg-gray-50 p-3 rounded text-gray-700 text-sm italic border border-gray-100 hidden-text-content">
+            ${data.text || "(未识别到文字，仅有录音)"}
+        </div>
+      `;
+      
+      container.prepend(card); // 最新的在最上面
+  }
+
+  // ===== 3. AI 分析逻辑 =====
+  function analyzeThis(studentName, btn) {
+      const card = btn.closest('.student-card');
+      const textContent = card.querySelector('.hidden-text-content').innerText.trim();
+      
+      if(!textContent || textContent.includes("未识别到文字")) {
+          alert("该条目没有文字内容，无法进行 AI 分析。请听录音手动评价。");
+          return;
+      }
+
+      // 1. 将内容填入分析面板
+      document.getElementById('live-transcription-text').innerText = textContent;
+      document.getElementById('current-analysis-student').innerText = studentName;
+      
+      // 2. 显示面板并滚动
+      const panel = document.getElementById('analysis-panel');
+      panel.classList.remove('hidden');
+      panel.scrollIntoView({ behavior: 'smooth' });
+      
+      // 3. 调用 AI
+      getAIFeedback(textContent);
+  }
+
+  async function getAIFeedback(userText) {
+      const apiKey = localStorage.getItem('MY_GEMINI_KEY');
+      if (!apiKey) {
+          alert("⚠️ 请先在顶部输入 API Key 并保存！");
+          document.getElementById('api-key-input').focus();
+          return;
+      }
+
+      const topic = document.getElementById('topic-input').value.trim();
+      const topicContext = topic ? `Topic: "${topic}". Check task response.` : "No specific topic.";
+      
+      // UI Reset
+      document.getElementById('score-panel').classList.add('hidden');
+      document.getElementById('ai-error-tbody').innerHTML = '<tr><td colspan="3" class="text-center p-4 text-gray-400"><i class="fas fa-spinner fa-spin"></i> AI 思考中...</td></tr>';
+      document.getElementById('ai-enhancement').innerText = "生成中...";
+      document.getElementById('ai-sample').innerText = "生成中...";
+
+      const prompt = `
+        Role: IELTS Speaking Examiner.
+        Task: Analyze the student's speech.
+        Context: ${topicContext}
+        
+        Output JSON Only:
+        {
+          "score": 6.5,
+          "cefr": "B2",
+          "rationale": "Short summary of why.",
+          "errors": [ {"org": "error text", "fix": "correction", "type": "Grammar"} ],
+          "polishing": "Native version of the speech with <mark>key changes</mark>.",
+          "sample": "A Band 9 version of the SAME story."
+        }
+        
+        Student Speech: "${userText}"
+      `;
+
+      try {
+          const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  contents: [{ parts: [{ text: prompt }] }]
+              })
+          });
+          
+          const raw = await response.json();
+          if(raw.error) throw new Error(raw.error.message);
+          
+          let cleanJson = raw.candidates[0].content.parts[0].text.replace(/```json|```/g, '');
+          const data = JSON.parse(cleanJson);
+          
+          renderReport(data);
+
+      } catch (e) {
+          console.error(e);
+          alert("AI 分析失败: " + e.message);
+      }
+  }
+
+  function renderReport(data) {
+      document.getElementById('score-panel').classList.remove('hidden');
+      document.getElementById('score-panel').classList.add('flex');
+      
+      document.getElementById('score-val').innerText = data.score;
+      document.getElementById('cefr-val').innerText = data.cefr;
+      document.getElementById('score-reason').innerText = data.rationale;
+      
+      const errBody = document.getElementById('ai-error-tbody');
+      errBody.innerHTML = "";
+      if(data.errors && data.errors.length) {
+          data.errors.forEach(e => {
+              errBody.innerHTML += `<tr>
+                <td class="text-red-700"><del>${e.org}</del></td>
+                <td class="text-green-700">${e.fix}</td>
+                <td class="text-gray-500 text-xs">${e.type}</td>
+              </tr>`;
+          });
+      } else {
+          errBody.innerHTML = `<tr><td colspan="3" class="text-center text-green-600">🎉 无明显语法错误</td></tr>`;
+      }
+      
+      document.getElementById('ai-enhancement').innerHTML = data.polishing;
+      document.getElementById('ai-sample').innerHTML = data.sample;
+  }
+
+  function scrollToTop() { window.scrollTo({ top: 0, behavior: 'smooth' }); }
+
+  // 初始化
+  window.addEventListener('load', () => {
+      loadApiKey();
+      initClassroom();
+  });
+</script>
+</body>
+</html>

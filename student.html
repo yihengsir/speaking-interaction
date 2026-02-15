@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>学生录音端</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-gray-100 flex flex-col items-center justify-center min-h-screen p-4">
+
+    <div class="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden">
+        <div class="bg-indigo-600 p-4 text-white text-center">
+            <h1 class="text-lg font-bold"><i class="fas fa-microphone-alt mr-2"></i>口语提交</h1>
+            <div id="connection-status" class="text-xs text-indigo-200 mt-1 flex justify-center items-center gap-2">
+                <i class="fas fa-spinner fa-spin"></i> 正在连接教室...
+            </div>
+        </div>
+
+        <div class="p-6">
+            <div id="step-name" class="mb-6">
+                <label class="block text-gray-700 font-bold mb-2 text-sm">你的名字</label>
+                <input type="text" id="student-name" class="w-full border-b-2 border-indigo-200 focus:border-indigo-600 outline-none py-2 text-xl text-center text-indigo-900 placeholder-gray-300 transition-colors" placeholder="输入姓名 (例如: Leo)">
+            </div>
+
+            <div class="mb-6 bg-gray-50 rounded-lg p-3 min-h-[100px] max-h-[150px] overflow-y-auto border border-gray-100 relative">
+                <p id="transcript-preview" class="text-gray-500 text-sm italic leading-relaxed">
+                    (点击下方录音，你的话会转成文字显示在这里...)
+                </p>
+                <div id="recording-indicator" class="hidden absolute top-2 right-2 flex items-center gap-1">
+                    <span class="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                    <span class="text-xs text-red-500 font-bold">REC</span>
+                </div>
+            </div>
+
+            <div class="flex flex-col items-center gap-4">
+                <div id="timer" class="text-3xl font-mono text-gray-300 font-bold transition-colors">00:00</div>
+                
+                <div class="flex items-center gap-6">
+                    <button id="btn-record" onclick="toggleRecord()" class="w-20 h-20 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-lg flex items-center justify-center text-3xl transition-all transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
+                        <i class="fas fa-microphone"></i>
+                    </button>
+
+                    <button id="btn-send" onclick="sendData()" class="hidden w-20 h-20 bg-green-500 hover:bg-green-600 text-white rounded-full shadow-lg flex items-center justify-center text-3xl transition-all transform hover:scale-105 active:scale-95 animate-bounce-in">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+                
+                <p id="action-hint" class="text-sm text-gray-400 mt-2">点击红色按钮开始录音</p>
+            </div>
+        </div>
+    </div>
+
+<style>
+    @keyframes bounce-in { 0% { transform: scale(0); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
+    .animate-bounce-in { animation: bounce-in 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+</style>
+
+<script>
+    // URL 参数获取 Teacher ID
+    const urlParams = new URLSearchParams(window.location.search);
+    const teacherId = urlParams.get('t'); // 使用 't' 作为参数名
+
+    let peer = null;
+    let conn = null;
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let recognition = null;
+    let finalTranscript = "";
+    let isRecording = false;
+    let timerInterval = null;
+
+    // 初始化 PeerJS
+    function initPeer() {
+        if (!teacherId) {
+            updateStatus("❌ 链接无效 (缺少教师ID)", "text-red-500");
+            return;
+        }
+
+        peer = new Peer(); // 学生端不需要固定ID，随机即可
+        
+        peer.on('open', (id) => {
+            console.log('My Peer ID:', id);
+            connectToTeacher();
+        });
+
+        peer.on('error', (err) => {
+            console.error(err);
+            updateStatus("⚠️ 连接出错，请刷新", "text-red-500");
+        });
+    }
+
+    function connectToTeacher() {
+        const nameInput = document.getElementById('student-name');
+        // 先建立连接，元数据稍后发送或更新
+        conn = peer.connect(teacherId, { 
+            metadata: { name: nameInput.value || "Anonymous" },
+            reliable: true 
+        });
+
+        conn.on('open', () => {
+            updateStatus("✅ 已连接到教室", "text-green-200 font-bold");
+        });
+
+        conn.on('close', () => {
+            updateStatus("❌ 与教师断开连接", "text-red-300");
+        });
+    }
+
+    function updateStatus(text, classes) {
+        const el = document.getElementById('connection-status');
+        el.innerHTML = text;
+        el.className = `text-xs mt-1 flex justify-center items-center gap-2 ${classes}`;
+    }
+
+    // 录音逻辑
+    async function toggleRecord() {
+        const name = document.getElementById('student-name').value.trim();
+        if (!name) {
+            alert("请先输入你的名字！");
+            document.getElementById('student-name').focus();
+            return;
+        }
+
+        if (!isRecording) {
+            // Start
+            try {
+                // 请求麦克风
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                startRecordingProcess(stream);
+                
+                // UI Update
+                isRecording = true;
+                const btn = document.getElementById('btn-record');
+                btn.innerHTML = '<i class="fas fa-stop"></i>';
+                btn.classList.remove('bg-red-500', 'hover:bg-red-600');
+                btn.classList.add('bg-gray-800', 'hover:bg-gray-900', 'animate-pulse');
+                
+                document.getElementById('recording-indicator').classList.remove('hidden');
+                document.getElementById('btn-send').classList.add('hidden');
+                document.getElementById('action-hint').innerText = "录音中... 点击黑色按钮停止";
+                document.getElementById('timer').classList.replace('text-gray-300', 'text-gray-800');
+
+                // Timer
+                let seconds = 0;
+                document.getElementById('timer').innerText = "00:00";
+                timerInterval = setInterval(() => {
+                    seconds++;
+                    const mm = Math.floor(seconds / 60).toString().padStart(2, '0');
+                    const ss = (seconds % 60).toString().padStart(2, '0');
+                    document.getElementById('timer').innerText = `${mm}:${ss}`;
+                }, 1000);
+
+            } catch (err) {
+                alert("无法访问麦克风。请确保使用 HTTPS 访问，并在浏览器设置中允许权限。\n错误: " + err.message);
+            }
+        } else {
+            // Stop
+            stopRecordingProcess();
+        }
+    }
+
+    function startRecordingProcess(stream) {
+        audioChunks = [];
+        // 尝试使用兼容性较好的 mimeType
+        const options = MediaRecorder.isTypeSupported('audio/webm') ? { mimeType: 'audio/webm' } : {};
+        mediaRecorder = new MediaRecorder(stream, options);
+        
+        mediaRecorder.ondataavailable = event => {
+            if (event.data.size > 0) audioChunks.push(event.data);
+        };
+        
+        mediaRecorder.start();
+
+        // 语音转文字 (Web Speech API)
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SpeechRecognition();
+            recognition.lang = 'en-US';
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            
+            finalTranscript = "";
+            
+            recognition.onresult = (event) => {
+                let interim = "";
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    if (event.results[i].isFinal) {
+                        finalTranscript += event.results[i][0].transcript;
+                    } else {
+                        interim += event.results[i][0].transcript;
+                    }
+                }
+                document.getElementById('transcript-preview').innerText = finalTranscript + interim;
+                document.getElementById('transcript-preview').classList.remove('text-gray-500', 'italic');
+                document.getElementById('transcript-preview').classList.add('text-gray-800');
+            };
+            
+            recognition.start();
+        } else {
+            document.getElementById('transcript-preview').innerText = "(你的浏览器不支持实时转字，但录音仍可发送)";
+        }
+    }
+
+    function stopRecordingProcess() {
+        mediaRecorder.stop();
+        if(recognition) recognition.stop();
+        
+        // Stop Stream tracks to release mic
+        mediaRecorder.stream.getTracks().forEach(track => track.stop());
+
+        isRecording = false;
+        clearInterval(timerInterval);
+
+        // UI Reset
+        const btn = document.getElementById('btn-record');
+        btn.innerHTML = '<i class="fas fa-undo"></i>'; // 变为重录图标
+        btn.classList.remove('bg-gray-800', 'hover:bg-gray-900', 'animate-pulse');
+        btn.classList.add('bg-gray-500', 'hover:bg-gray-600'); // 灰色表示重录
+        
+        document.getElementById('recording-indicator').classList.add('hidden');
+        document.getElementById('btn-send').classList.remove('hidden'); // 显示发送按钮
+        document.getElementById('action-hint').innerText = "满意请发送，不满意点击灰色按钮重录";
+    }
+
+    function sendData() {
+        if (!conn || !conn.open) {
+            alert("未连接到教师端，请检查网络或重新扫码。");
+            return;
+        }
+
+        const name = document.getElementById('student-name').value;
+        const blob = new Blob(audioChunks, { type: 'audio/webm' });
+        
+        // 构建 payload
+        const payload = {
+            type: 'submission',
+            name: name,
+            text: document.getElementById('transcript-preview').innerText,
+            blob: blob,
+            timestamp: Date.now()
+        };
+
+        conn.send(payload);
+
+        // UI Feedback
+        alert("✅ 发送成功！");
+        
+        // 重置状态以便下一次录音
+        document.getElementById('transcript-preview').innerText = "(点击下方录音，你的话会转成文字显示在这里...)";
+        document.getElementById('transcript-preview').classList.add('text-gray-500', 'italic');
+        document.getElementById('btn-send').classList.add('hidden');
+        document.getElementById('timer').innerText = "00:00";
+        document.getElementById('btn-record').innerHTML = '<i class="fas fa-microphone"></i>';
+        document.getElementById('btn-record').className = "w-20 h-20 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-lg flex items-center justify-center text-3xl transition-all transform active:scale-95";
+        document.getElementById('action-hint').innerText = "点击红色按钮开始录音";
+    }
+
+    // 启动
+    window.addEventListener('load', initPeer);
+
+</script>
+</body>
+</html>
