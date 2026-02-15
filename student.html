@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Student - Speaking (Fast & Save)</title>
+    <title>Student - Speaking</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
@@ -109,10 +109,10 @@
             </div>
             
             <div class="p-3 border-t bg-gray-50 text-center flex-shrink-0 flex gap-2 justify-center" id="modal-footer">
-                <button onclick="saveFeedbackImage()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-full text-sm font-bold shadow flex items-center">
+                <button onclick="saveFeedbackImage()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-full text-sm font-bold shadow flex items-center transition">
                     <i class="fas fa-camera mr-2"></i> Save Image
                 </button>
-                <button onclick="closeModal()" class="bg-gray-800 hover:bg-gray-900 text-white px-6 py-2 rounded-full text-sm font-bold shadow">
+                <button onclick="closeModal()" class="bg-gray-800 hover:bg-gray-900 text-white px-6 py-2 rounded-full text-sm font-bold shadow transition">
                     Close
                 </button>
             </div>
@@ -165,7 +165,7 @@
             });
             conn.on('data', (msg) => {
                 if(msg.type === 'topic') document.getElementById('topic-display').innerText = msg.data;
-                // 收到 ACK 确认
+                // 收到 ACK，说明教师端已经接收到完整 Blob
                 if(msg.type === 'ack') { 
                     completeUpload();
                 }
@@ -245,7 +245,7 @@
         if(recognition) { recognition.onend = null; recognition.stop(); }
     }
 
-    // --- 极速发送逻辑 (使用 Blob 直接发送，不再分片) ---
+    // --- 极速发送逻辑 (Direct Blob Transmission) ---
     function sendDataDirect() {
         if(!conn || !conn.open) return alert("Not connected to teacher");
         
@@ -258,7 +258,7 @@
         document.getElementById('progress-container').classList.remove('hidden');
         document.getElementById('progress-text').innerText = "Transmitting...";
         
-        // 直接构造并发送数据对象 (PeerJS 会自动处理二进制)
+        // 直接发送数据包 (WebRTC Data Channel 支持 Blob)
         conn.send({
             type: 'audio-submission-fast',
             uuid: myUUID,
@@ -267,13 +267,12 @@
             blob: blob
         });
 
-        // 立即进入等待状态
+        // 立即显示验证状态，防止用户关闭
         document.getElementById('progress-text').innerText = "Verifying with server... (Do not close)";
     }
 
     function completeUpload() {
         document.getElementById('progress-text').innerText = "Done!";
-        // 延时一点点让用户看到Done
         setTimeout(() => {
             alert("✅ Sent Successfully!");
             resetUI();
@@ -323,32 +322,34 @@
     
     function closeModal() { document.getElementById('feedback-modal').classList.add('hidden'); }
 
-    // --- 保存为图片 ---
+    // --- 保存为图片逻辑 ---
     function saveFeedbackImage() {
         const modalContent = document.getElementById('feedback-content');
         const footer = document.getElementById('modal-footer');
         
-        // 暂时隐藏按钮，避免截进去
-        const originalFooterDisplay = footer.style.display;
+        // 1. 临时隐藏底部按钮，避免截图包含按钮
+        const originalDisplay = footer.style.display;
         footer.style.display = 'none';
 
+        // 2. 执行截图
         html2canvas(modalContent, {
             scale: 2, // 提高清晰度
             useCORS: true,
-            backgroundColor: "#ffffff"
+            backgroundColor: "#ffffff",
+            logging: false
         }).then(canvas => {
-            // 恢复按钮
-            footer.style.display = originalFooterDisplay;
+            // 3. 恢复按钮
+            footer.style.display = originalDisplay;
 
-            // 下载
+            // 4. 创建下载链接
             const link = document.createElement('a');
-            link.download = `Report_${myName}_${Date.now()}.png`;
+            link.download = `Report_${myName}_${new Date().toLocaleDateString()}.png`;
             link.href = canvas.toDataURL("image/png");
             link.click();
         }).catch(err => {
             console.error(err);
-            alert("Save failed, please try screenshots.");
-            footer.style.display = originalFooterDisplay;
+            alert("Image save failed. Please screenshot manually.");
+            footer.style.display = originalDisplay;
         });
     }
 </script>
