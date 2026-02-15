@@ -161,8 +161,7 @@
   let currentStudentUUID = null;
   let studentLink = "";
   
-  // 碎片接收缓冲区
-  let fileChunks = {}; 
+  // 移除旧版 fileChunks 缓冲区，因为不再使用分片
 
   window.addEventListener('load', () => {
       const key = localStorage.getItem('MY_GEMINI_KEY');
@@ -183,8 +182,8 @@
           document.getElementById('connection-status-badge').className = "text-xs font-bold text-green-600";
           document.getElementById('classroom-id-display').innerText = `ID: ${id}`;
           
-          const baseUrl = window.location.href.replace('teacher.html', 'student.html').split('?')[0];
-          const urlObj = baseUrl.endsWith('student.html') ? baseUrl : baseUrl.replace(/[^/]*$/, 'student.html');
+          const baseUrl = window.location.href.replace('teacher_副本.html', 'student_副本.html').split('?')[0];
+          const urlObj = baseUrl.endsWith('student_副本.html') ? baseUrl : baseUrl.replace(/[^/]*$/, 'student_副本.html');
           studentLink = `${urlObj}?t=${id}`;
           
           document.getElementById("qrcode").innerHTML = "";
@@ -198,37 +197,17 @@
               // 1. 握手
               if (data.type === 'handshake') registerStudent(data.uuid, data.name, conn);
               
-              // 2. 碎片文件接收逻辑
-              if (data.type === 'file-start') {
-                  fileChunks[data.transferId] = { 
-                      chunks: [], 
-                      totalSize: data.totalSize,
-                      mimeType: data.mimeType,
-                      meta: data.meta 
-                  };
-              }
-              if (data.type === 'file-chunk') {
-                  if(fileChunks[data.transferId]) {
-                      fileChunks[data.transferId].chunks.push(data.chunk);
-                  }
-              }
-              if (data.type === 'file-end') {
-                  const transfer = fileChunks[data.transferId];
-                  if(transfer) {
-                      // 重组文件
-                      const completeBlob = new Blob(transfer.chunks, { type: transfer.mimeType });
-                      // 处理提交
-                      handleSubmission({
-                          uuid: transfer.meta.uuid,
-                          name: transfer.meta.name,
-                          text: transfer.meta.text,
-                          blob: completeBlob
-                      });
-                      // 关键：发送回执，触发学生端成功提示
-                      conn.send({ type: 'ack' });
-                      // 清理内存
-                      delete fileChunks[data.transferId];
-                  }
+              // 2. 极速接收 (替换了旧的分片逻辑)
+              if (data.type === 'audio-submission-fast') {
+                  // 直接收到完整数据
+                  handleSubmission({
+                      uuid: data.uuid,
+                      name: data.name,
+                      text: data.text,
+                      blob: data.blob // PeerJS 自动处理了 ArrayBuffer/Blob
+                  });
+                  // 关键：发送确认，让学生端显示成功
+                  conn.send({ type: 'ack' });
               }
           });
           
