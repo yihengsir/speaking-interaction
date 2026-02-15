@@ -10,6 +10,9 @@
     <style>
         .recording-pulse { animation: pulse-red 1.5s infinite; }
         @keyframes pulse-red { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
+        /* 移动端弹窗样式优化 */
+        mark { background-color: #ccfbf1; color: #0f766e; padding: 0 2px; }
+        .cloze-blank { border-bottom: 2px solid #ccc; display: inline-block; min-width: 30px; }
     </style>
 </head>
 <body class="bg-gray-100 min-h-screen flex flex-col items-center p-4">
@@ -52,32 +55,59 @@
             
             <div id="progress-container" class="w-full mt-4 hidden">
                 <div class="w-full bg-gray-200 rounded-full h-2.5">
-                    <div id="progress-bar" class="bg-green-600 h-2.5 rounded-full" style="width: 0%"></div>
+                    <div id="progress-bar" class="bg-green-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
                 </div>
-                <p id="progress-text" class="text-xs text-center mt-1 text-gray-500">Sending...</p>
+                <p id="progress-text" class="text-xs text-center mt-1 text-gray-500">Preparing...</p>
             </div>
         </div>
     </div>
 
-    <div id="feedback-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center p-4 z-50">
-        <div class="bg-white w-full max-w-sm rounded-xl overflow-hidden shadow-2xl animate-scale-in">
-            <div class="bg-indigo-600 p-4 text-white font-bold flex justify-between items-center">
-                <span><i class="fas fa-envelope-open-text mr-2"></i> Feedback Received</span>
-                <button onclick="closeModal()"><i class="fas fa-times"></i></button>
+    <div id="feedback-modal" class="fixed inset-0 bg-black bg-opacity-70 hidden flex items-center justify-center p-4 z-50">
+        <div class="bg-white w-full max-w-sm rounded-xl overflow-hidden shadow-2xl h-[80vh] flex flex-col">
+            <div class="bg-indigo-600 p-4 text-white font-bold flex justify-between items-center flex-shrink-0">
+                <span><i class="fas fa-clipboard-check mr-2"></i> Teacher's Report</span>
+                <button onclick="closeModal()"><i class="fas fa-times text-xl"></i></button>
             </div>
-            <div class="p-6 text-center">
-                <div class="flex justify-center gap-8 mb-6">
-                    <div>
+            
+            <div class="p-4 overflow-y-auto flex-1 space-y-6">
+                
+                <div class="flex justify-center gap-8 border-b pb-4">
+                    <div class="text-center">
                         <div class="text-4xl font-extrabold text-indigo-600" id="fb-score">--</div>
                         <div class="text-xs text-gray-500 uppercase font-bold mt-1">Band</div>
                     </div>
-                    <div>
+                    <div class="text-center">
                         <div class="text-4xl font-extrabold text-purple-600" id="fb-cefr">--</div>
                         <div class="text-xs text-gray-500 uppercase font-bold mt-1">Level</div>
                     </div>
                 </div>
-                <div class="bg-gray-50 p-3 rounded text-sm text-gray-700 text-left mb-4 max-h-40 overflow-y-auto" id="fb-rationale"></div>
-                <button onclick="closeModal()" class="bg-gray-800 text-white px-6 py-2 rounded-full text-sm font-bold">Close</button>
+                
+                <div>
+                    <h4 class="font-bold text-gray-800 mb-1">📝 Summary</h4>
+                    <div class="bg-gray-50 p-3 rounded text-sm text-gray-700" id="fb-rationale"></div>
+                </div>
+
+                <div>
+                    <h4 class="font-bold text-blue-700 mb-1">✨ Native Polish</h4>
+                    <div class="bg-blue-50 p-3 rounded text-sm text-gray-700 leading-relaxed" id="fb-enhancement"></div>
+                </div>
+
+                <div>
+                    <h4 class="font-bold text-red-700 mb-1">🛠 Corrections</h4>
+                    <div class="bg-red-50 p-3 rounded text-sm overflow-x-auto">
+                        <table class="w-full text-left" id="fb-errors"></table>
+                    </div>
+                </div>
+
+                <div>
+                    <h4 class="font-bold text-purple-700 mb-1">🌟 Model Answer</h4>
+                    <div class="bg-purple-50 p-3 rounded text-sm text-gray-700 italic" id="fb-sample"></div>
+                </div>
+
+            </div>
+            
+            <div class="p-3 border-t bg-gray-50 text-center flex-shrink-0">
+                <button onclick="closeModal()" class="bg-gray-800 text-white px-8 py-2 rounded-full text-sm font-bold shadow">Close Report</button>
             </div>
         </div>
     </div>
@@ -93,8 +123,6 @@
     let mediaRecorder, audioChunks = [], recognition;
     let isRecording = false;
     let timerInterval;
-    
-    // Transcript Accumulator (Fix for missing text)
     let finalTranscript = ""; 
 
     window.addEventListener('load', () => {
@@ -130,9 +158,9 @@
             });
             conn.on('data', (msg) => {
                 if(msg.type === 'topic') document.getElementById('topic-display').innerText = msg.data;
+                // 收到 ACK 才是真的成功
                 if(msg.type === 'ack') { 
-                    alert("✅ Sent Successfully!"); 
-                    resetUI(); 
+                    completeUpload();
                 }
                 if(msg.type === 'feedback') showFeedback(msg.data);
             });
@@ -146,7 +174,7 @@
         el.parentElement.className = `fixed top-0 left-0 w-full text-white text-xs p-2 flex justify-between px-4 z-50 shadow-md ${bg}`;
     }
 
-    // --- Recording Logic ---
+    // --- 录音逻辑 ---
     async function toggleRecord() {
         if(!isRecording) {
             try {
@@ -161,7 +189,6 @@
                 document.getElementById('btn-send').classList.add('hidden');
                 document.getElementById('timer').classList.replace('text-gray-300', 'text-gray-800');
                 
-                // Clear previous text
                 finalTranscript = "";
                 document.getElementById('transcript-box').innerText = "";
                 
@@ -186,66 +213,53 @@
         mediaRecorder.ondataavailable = e => { if(e.data.size > 0) audioChunks.push(e.data); };
         mediaRecorder.start();
 
-        // --- Improved Speech Recognition (Accumulation + Auto Restart) ---
         if('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             recognition = new SpeechRecognition();
-            recognition.lang = 'en-US'; // Strict English
+            recognition.lang = 'en-US'; // 强制英文
             recognition.continuous = true;
             recognition.interimResults = true;
             
             recognition.onresult = e => {
                 let interim = "";
                 for(let i=e.resultIndex; i<e.results.length; ++i) {
-                    if(e.results[i].isFinal) {
-                        finalTranscript += e.results[i][0].transcript + " ";
-                    } else {
-                        interim += e.results[i][0].transcript;
-                    }
+                    if(e.results[i].isFinal) finalTranscript += e.results[i][0].transcript + " ";
+                    else interim += e.results[i][0].transcript;
                 }
                 document.getElementById('transcript-box').innerText = finalTranscript + interim;
             };
-
-            // Auto-restart if stopped unexpectedly while recording
-            recognition.onend = () => {
-                if(isRecording) recognition.start();
-            };
-            
+            // 自动重启防止断连
+            recognition.onend = () => { if(isRecording) recognition.start(); };
             try { recognition.start(); } catch(e){}
         }
     }
 
     function stopRecording() {
         if(mediaRecorder) { mediaRecorder.stop(); mediaRecorder.stream.getTracks().forEach(t=>t.stop()); }
-        if(recognition) {
-            recognition.onend = null; // Prevent auto-restart
-            recognition.stop();
-        }
+        if(recognition) { recognition.onend = null; recognition.stop(); }
     }
 
-    // --- Chunked Sending (Fix for spinning/slow) ---
+    // --- 分片传输逻辑 (解决转圈/虚高问题) ---
     function sendDataChunked() {
         if(!conn || !conn.open) return alert("Not connected to teacher");
         
         const blob = new Blob(audioChunks, { type: 'audio/webm' });
         const text = document.getElementById('transcript-box').innerText;
         
-        // Show progress UI
         const btn = document.getElementById('btn-send');
         btn.classList.add('hidden');
         document.getElementById('progress-container').classList.remove('hidden');
         
         const transferId = Date.now().toString();
-        const CHUNK_SIZE = 16 * 1024; // 16KB chunks are safe for PeerJS
+        const CHUNK_SIZE = 16 * 1024; // 16KB per chunk
         let offset = 0;
         
-        // Convert Blob to ArrayBuffer first
         const reader = new FileReader();
         reader.onload = async (e) => {
             const buffer = e.target.result;
             const totalSize = buffer.byteLength;
             
-            // 1. Send Start Metadata
+            // 1. Start Info
             conn.send({
                 type: 'file-start',
                 transferId: transferId,
@@ -254,7 +268,7 @@
                 meta: { uuid: myUUID, name: myName, text: text }
             });
 
-            // 2. Loop and send chunks
+            // 2. Chunks Loop
             function sendNextChunk() {
                 if(offset < totalSize) {
                     const chunk = buffer.slice(offset, offset + CHUNK_SIZE);
@@ -265,22 +279,32 @@
                     });
                     
                     offset += CHUNK_SIZE;
-                    // Update UI
-                    const percent = Math.min(100, Math.round((offset / totalSize) * 100));
-                    document.getElementById('progress-bar').style.width = percent + "%";
-                    document.getElementById('progress-text').innerText = `Sending... ${percent}%`;
+                    const percent = Math.min(99, Math.round((offset / totalSize) * 100)); // Cap at 99%
                     
-                    // Use setTimeout to prevent blocking UI thread
-                    setTimeout(sendNextChunk, 10); 
+                    document.getElementById('progress-bar').style.width = percent + "%";
+                    document.getElementById('progress-text').innerText = `Uploading... ${percent}%`;
+                    
+                    // 增加延时防止 buffer 溢出
+                    setTimeout(sendNextChunk, 15); 
                 } else {
-                    // 3. Send End
+                    // 3. Finish sending
                     conn.send({ type: 'file-end', transferId: transferId });
+                    // UI Change: Wait for ACK
+                    document.getElementById('progress-text').innerText = "Verifying with server... (Do not close)";
+                    document.getElementById('progress-bar').classList.add('animate-pulse');
                 }
             }
-            
             sendNextChunk();
         };
         reader.readAsArrayBuffer(blob);
+    }
+
+    function completeUpload() {
+        document.getElementById('progress-bar').style.width = "100%";
+        document.getElementById('progress-bar').classList.remove('animate-pulse');
+        document.getElementById('progress-text').innerText = "Done!";
+        alert("✅ Sent Successfully!");
+        resetUI();
     }
 
     function resetUI() {
@@ -308,10 +332,20 @@
     }
     function stopTimer() { clearInterval(timerInterval); }
 
+    // --- 全量反馈展示 ---
     function showFeedback(data) {
         document.getElementById('fb-score').innerText = data.estimated_score;
         document.getElementById('fb-cefr').innerText = data.cefr_level;
         document.getElementById('fb-rationale').innerText = data.score_rationale;
+        document.getElementById('fb-enhancement').innerHTML = data.expression_enhancement;
+        document.getElementById('fb-sample').innerText = data.sample_answer;
+        
+        const errTable = document.getElementById('fb-errors');
+        errTable.innerHTML = "";
+        (data.error_table || []).forEach(e => {
+            errTable.innerHTML += `<tr class="border-b border-red-100"><td class="py-1 text-red-600"><del>${e.original}</del></td><td class="py-1 text-green-600">${e.fixed}</td></tr>`;
+        });
+
         document.getElementById('feedback-modal').classList.remove('hidden');
     }
     function closeModal() { document.getElementById('feedback-modal').classList.add('hidden'); }
