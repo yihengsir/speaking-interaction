@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>雅思口语 AI 课堂 - 教师端 (旗舰版)</title>
+  <title>托福口语 AI 课堂 - 教师端 (旗舰版)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -40,7 +40,7 @@
 <main class="main-container">
   <div class="card">
     <div class="flex justify-between items-center mb-6 border-b pb-4">
-        <h1 class="text-2xl font-bold text-gray-800"><i class="fas fa-chalkboard-teacher mr-2 text-indigo-600"></i>雅思口语 AI 课堂</h1>
+        <h1 class="text-2xl font-bold text-gray-800"><i class="fas fa-chalkboard-teacher mr-2 text-indigo-600"></i>托福口语 AI 课堂</h1>
         <div class="text-right">
             <div id="connection-status-badge" class="text-xs font-bold text-red-500">🔴 未连接</div>
         </div>
@@ -94,7 +94,7 @@
         <div id="score-panel" class="hidden score-card">
            <div class="text-center px-4">
                <div class="score-value text-indigo-600" id="score-val">--</div>
-               <div class="text-xs font-bold text-gray-500 uppercase">IELTS Band</div>
+               <div class="text-xs font-bold text-gray-500 uppercase">TOEFL Score (0-6)</div>
            </div>
            <div class="text-center px-4">
                <div class="score-value text-purple-600" id="cefr-val">--</div>
@@ -348,14 +348,14 @@
       if(!apiKey) return alert("请先设置 API Key");
 
       const prompt = `
-        Role: Strict IELTS Speaking Examiner.
+        Role: Strict TOEFL Speaking Rater.
         Task: Analyze the student's speech based on the provided topic.
         Topic: "${topic}"
         Student Speech: "${text}"
 
         **CRITICAL INSTRUCTIONS:**
-        1. If speech is under 10 words, score 1.0.
-        2. Do NOT be generous. A 6.5 requires complex sentences.
+        1. Evaluate the speech based on ETS standards (Scale 0-6).
+        2. Scale 6.0: Fluid, highly intelligible, effective grammar/vocab. Scale 4.0-5.5: Generally clear but with some hesitation. Scale < 4.0: Choppy, limited range.
         3. Provide output in EXACT JSON format.
 
         JSON Schema:
@@ -367,7 +367,7 @@
             "expression_enhancement": "Native version with <mark>highlights</mark>.",
             "framework_practice": "Cloze test version replacing <mark> content with [____] <span class='cloze-hint'>(Chinese Meaning)</span>.",
             "vocabulary": [ { "phrase": "word", "definition": "def" } ],
-            "sample_answer": "Band 9 model answer."
+            "sample_answer": "Score 6.0 model answer."
         }
       `;
 
