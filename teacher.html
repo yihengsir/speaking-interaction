@@ -347,7 +347,7 @@
       const apiKey = localStorage.getItem('MY_GEMINI_KEY');
       if(!apiKey) return alert("请先设置 API Key");
 
-      const prompt = `
+     const prompt = `
         Role: Fair and Precise TOEFL Speaking Rater.
         Task: Analyze the student's speech based on the provided topic and the official ETS "Take an Interview" scoring rubric.
         Topic: "${topic}"
@@ -362,17 +362,22 @@
         * Score 1 (Unsuccessful): Vaguely connected. Mostly unintelligible. Isolated words/phrases.
         * Score 0: No response, unintelligible, no English, or completely off-topic.
 
-        **CONVERSION TO 0-6 REPORTING SCALE:**
-        After determining the raw score, you MUST convert it to the final reporting scale of 0 to 6.0.
-        (e.g., Raw 5 = 5.5 to 6.0; Raw 4 = 4.5 to 5.0; Raw 3 = 3.5 to 4.0; Raw 2 = 2.0 to 3.0, etc.)
-        Your final \`estimated_score\` in the JSON MUST be on the 0-6 scale.
+        **CONVERSION TO 0-6 REPORTING SCALE & STRICT CEFR MAPPING:**
+        1. Convert the raw score to the final reporting scale of 0 to 6.0. 
+        2. STRICTLY map the converted score to the appropriate CEFR level based on these rules:
+           - 5.5 to 6.0 -> "C1" (Advanced)
+           - 4.0 to 5.0 -> "B2" (High-Intermediate)
+           - 3.0 to 3.5 -> "B1" (Low-Intermediate)
+           - 1.5 to 2.5 -> "A2" (Basic)
+           - 0.0 to 1.0 -> "A1" (Beginner)
+        Your final \`estimated_score\` MUST be on the 0-6 scale, and the \`cefr_level\` MUST strictly follow the mapping above.
 
         Provide output in EXACT JSON format. Do not use markdown blocks (like \`\`\`json) in the final output.
 
         JSON Schema:
         {
             "estimated_score": 5.5,
-            "cefr_level": "B2",
+            "cefr_level": "C1",
             "score_rationale": "Brief assessment summary explaining the raw performance (Delivery, Language Use, Elaboration) and its final converted score.",
             "error_table": [ { "original": "error", "fixed": "correction", "type": "Grammar/Pronunciation/Vocab" } ],
             "expression_enhancement": "Native version with <mark>highlights</mark>.",
