@@ -348,26 +348,37 @@
       if(!apiKey) return alert("请先设置 API Key");
 
       const prompt = `
-        Role: Strict TOEFL Speaking Rater.
-        Task: Analyze the student's speech based on the provided topic.
+        Role: Fair and Precise TOEFL Speaking Rater.
+        Task: Analyze the student's speech based on the provided topic and the official ETS "Take an Interview" scoring rubric.
         Topic: "${topic}"
         Student Speech: "${text}"
 
-        **CRITICAL INSTRUCTIONS:**
-        1. Evaluate the speech based on ETS standards (Scale 0-6).
-        2. Scale 6.0: Fluid, highly intelligible, effective grammar/vocab. Scale 4.0-5.5: Generally clear but with some hesitation. Scale < 4.0: Choppy, limited range.
-        3. Provide output in EXACT JSON format.
+        **CRITICAL INSTRUCTIONS & SCORING RUBRIC (Raw Scale 0-5):**
+        First, evaluate the response using the following raw rubric:
+        * Score 5 (Fully successful): On topic, well elaborated. Good pace, natural pauses. Intelligible pronunciation. Accurate grammar/vocab allows precise meanings. (Occasional minor errors allowed).
+        * Score 4 (Generally successful): On topic, elaborated, but lacks some connectors. Good pace, minor pausing. Intelligible, adequate grammar/vocabulary.
+        * Score 3 (Partially successful): On topic but limited elaboration. Choppy pace, frequent pauses/fillers. Pronunciation inaccuracies affect intelligibility. Limited grammar/vocab restricts precision.
+        * Score 2 (Mostly unsuccessful): Minimally connected, little relevant elaboration. Limited intelligibility. Very limited grammar/vocabulary.
+        * Score 1 (Unsuccessful): Vaguely connected. Mostly unintelligible. Isolated words/phrases.
+        * Score 0: No response, unintelligible, no English, or completely off-topic.
+
+        **CONVERSION TO 0-6 REPORTING SCALE:**
+        After determining the raw score, you MUST convert it to the final reporting scale of 0 to 6.0.
+        (e.g., Raw 5 = 5.5 to 6.0; Raw 4 = 4.5 to 5.0; Raw 3 = 3.5 to 4.0; Raw 2 = 2.0 to 3.0, etc.)
+        Your final \`estimated_score\` in the JSON MUST be on the 0-6 scale.
+
+        Provide output in EXACT JSON format. Do not use markdown blocks (like \`\`\`json) in the final output.
 
         JSON Schema:
         {
             "estimated_score": 5.5,
-            "cefr_level": "B1",
-            "score_rationale": "Assessment summary.",
-            "error_table": [ { "original": "error", "fixed": "correction", "type": "Grammar" } ],
+            "cefr_level": "B2",
+            "score_rationale": "Brief assessment summary explaining the raw performance (Delivery, Language Use, Elaboration) and its final converted score.",
+            "error_table": [ { "original": "error", "fixed": "correction", "type": "Grammar/Pronunciation/Vocab" } ],
             "expression_enhancement": "Native version with <mark>highlights</mark>.",
             "framework_practice": "Cloze test version replacing <mark> content with [____] <span class='cloze-hint'>(Chinese Meaning)</span>.",
             "vocabulary": [ { "phrase": "word", "definition": "def" } ],
-            "sample_answer": "Score 6.0 model answer."
+            "sample_answer": "Score 6.0 model answer demonstrating natural pacing, elaboration, and accurate vocabulary."
         }
       `;
 
