@@ -158,6 +158,7 @@
   let students = new Map(); 
   let currentAnalysisData = null;
   let currentStudentUUID = null;
+  let currentTransferId = null; // 新增：保存当前正在点评的记录ID
   let studentLink = "";
   
   // 碎片接收缓冲区
@@ -191,7 +192,6 @@
           document.getElementById("qrcode").innerHTML = "";
           new QRCode(document.getElementById("qrcode"), { text: studentLink, width: 100, height: 100 });
           
-          // Start Heartbeat to keep connections alive during long classes
           clearInterval(heartbeatInterval);
           heartbeatInterval = setInterval(() => {
               students.forEach(s => {
@@ -199,10 +199,9 @@
                       s.conn.send({ type: 'ping' });
                   }
               });
-          }, 20000); // Send heartbeat every 20s
+          }, 20000);
       });
 
-      // Handle silent disconnections to ensure robustness
       peer.on('disconnected', () => {
           document.getElementById('connection-status-badge').innerText = "🟡 正在重连...";
           document.getElementById('connection-status-badge').className = "text-xs font-bold text-yellow-500";
@@ -213,13 +212,9 @@
           conn.on('open', () => { if(conn.metadata?.uuid) registerStudent(conn.metadata.uuid, conn.metadata.name, conn); });
           
           conn.on('data', (data) => {
-              // 0. Heartbeat Pong
               if (data.type === 'pong') { /* Connection active */ }
-
-              // 1. 握手
               if (data.type === 'handshake') registerStudent(data.uuid, data.name, conn);
               
-              // 2. 碎片文件接收逻辑
               if (data.type === 'file-start') {
                   fileChunks[data.transferId] = { 
                       chunks: [], 
@@ -238,12 +233,13 @@
                   if(transfer) {
                       const completeBlob = new Blob(transfer.chunks, { type: transfer.mimeType });
                       handleSubmission({
+                          transferId: data.transferId, // 提取传输ID
                           uuid: transfer.meta.uuid,
                           name: transfer.meta.name,
                           text: transfer.meta.text,
                           blob: completeBlob
                       });
-                      conn.send({ type: 'ack' });
+                      conn.send({ type: 'ack', transferId: data.transferId });
                       delete fileChunks[data.transferId];
                   }
               }
@@ -293,10 +289,10 @@
   function handleSubmission(data) {
       const container = document.getElementById('submissions-list');
       const audioUrl = URL.createObjectURL(data.blob);
-      const id = `sub-${Date.now()}`;
+      const id = data.transferId; // 使用透传的ID作为元素ID
 
       const item = document.createElement('div');
-      item.id = id;
+      item.id = `sub-${id}`;
       item.className = "bg-white p-4 rounded-lg border border-gray-200 shadow-sm flex flex-col md:flex-row gap-4 items-start animate-fade-in";
       item.innerHTML = `
         <div class="flex-1 w-full">
@@ -313,7 +309,7 @@
              <button onclick="triggerAnalysis('${data.uuid}', '${id}', '${data.name}')" class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-4 py-2 rounded shadow transition">
                 <i class="fas fa-magic mr-1"></i> AI 深度点评
              </button>
-             <button onclick="deleteSubmission('${id}')" class="bg-red-50 hover:bg-red-100 text-red-500 text-sm px-4 py-2 rounded transition">
+             <button onclick="deleteSubmission('sub-${id}')" class="bg-red-50 hover:bg-red-100 text-red-500 text-sm px-4 py-2 rounded transition">
                 <i class="fas fa-trash"></i>
              </button>
         </div>
@@ -330,6 +326,7 @@
       const topic = document.getElementById('topic-input').value;
       
       currentStudentUUID = uuid;
+      currentTransferId = subId; // 记录正在点评的具体提交ID
       document.getElementById('current-analysis-student').innerText = name;
       
       const panel = document.getElementById('analysis-panel');
@@ -439,7 +436,8 @@
   function sendFeedbackToStudent() {
       const student = students.get(currentStudentUUID);
       if(student && student.conn.open) {
-          student.conn.send({ type: 'feedback', data: currentAnalysisData });
+          // 透传 transferId，让学生端知道这是针对哪一次录音的点评
+          student.conn.send({ type: 'feedback', transferId: currentTransferId, data: currentAnalysisData });
           alert("✅ 完整报告已发送给 " + student.name);
       } else {
           alert("❌ 发送失败：学生已离线");
@@ -450,6 +448,7 @@
       document.getElementById('analysis-panel').classList.add('hidden');
       currentAnalysisData = null;
       currentStudentUUID = null;
+      currentTransferId = null;
       window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 </script>
