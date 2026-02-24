@@ -8,6 +8,8 @@
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
+        /* 关键点：禁用移动端下拉刷新 */
+        body, html { overscroll-behavior-y: none; }
         .recording-pulse { animation: pulse-red 1.5s infinite; }
         @keyframes pulse-red { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
         mark { background-color: #ccfbf1; color: #0f766e; padding: 0 2px; }
@@ -16,9 +18,12 @@
 </head>
 <body class="bg-gray-100 min-h-screen flex flex-col items-center p-4">
 
-    <div class="fixed top-0 left-0 w-full bg-gray-900 text-white text-xs p-2 flex justify-between px-4 z-50 shadow-md">
+    <div class="fixed top-0 left-0 w-full bg-gray-900 text-white text-xs p-2 flex justify-between items-center px-4 z-50 shadow-md cursor-pointer" onclick="manualReconnect()" title="Tap to refresh connection">
         <span id="conn-status"><i class="fas fa-spinner fa-spin"></i> Connecting...</span>
-        <span id="my-name-display" class="font-bold text-yellow-400"></span>
+        <div class="flex items-center gap-3">
+            <span class="text-[10px] text-gray-400 opacity-80"><i class="fas fa-sync-alt"></i> Tap to Reconnect</span>
+            <span id="my-name-display" class="font-bold text-yellow-400"></span>
+        </div>
     </div>
 
     <div id="setup-panel" class="bg-white w-full max-w-sm rounded-xl shadow-lg p-6 mt-20 text-center hidden">
@@ -61,17 +66,17 @@
         </div>
 
         <button onclick="openHistory()" class="w-full bg-white border border-gray-200 text-indigo-600 py-3 rounded-xl font-bold shadow-sm hover:bg-indigo-50 transition">
-            <i class="fas fa-history mr-2"></i> My Feedback History
+            <i class="fas fa-folder-open mr-2"></i> My Records & Feedback
         </button>
     </div>
 
     <div id="history-modal" class="fixed inset-0 bg-black bg-opacity-70 hidden flex flex-col items-center justify-end md:justify-center p-0 md:p-4 z-40">
-        <div class="bg-white w-full max-w-sm rounded-t-xl md:rounded-xl overflow-hidden shadow-2xl h-[70vh] flex flex-col">
+        <div class="bg-white w-full max-w-sm rounded-t-xl md:rounded-xl overflow-hidden shadow-2xl h-[85vh] flex flex-col">
             <div class="bg-gray-800 p-4 text-white font-bold flex justify-between items-center flex-shrink-0">
-                <span><i class="fas fa-book mr-2"></i> Past Reports</span>
+                <span><i class="fas fa-book mr-2"></i> Local Records</span>
                 <button onclick="closeHistory()"><i class="fas fa-times text-xl"></i></button>
             </div>
-            <div class="p-4 overflow-y-auto flex-1 space-y-3" id="history-list">
+            <div class="p-4 overflow-y-auto flex-1 space-y-4" id="history-list">
                 </div>
         </div>
     </div>
@@ -131,12 +136,31 @@
     let conn = null;
     let myUUID = localStorage.getItem('stu_uuid') || 'stu_'+Date.now();
     let myName = localStorage.getItem('stu_name') || "";
-    let feedbackHistory = JSON.parse(localStorage.getItem('stu_feedback_history')) || [];
     
     let mediaRecorder, audioChunks = [], recognition;
     let isRecording = false;
+    let isUploading = false;
     let timerInterval;
     let finalTranscript = ""; 
+
+    // === IndexedDB 本地数据库设置 ===
+    let db;
+    const dbRequest = indexedDB.open("SpeakingAppDB", 1);
+    dbRequest.onupgradeneeded = (e) => {
+        db = e.target.result;
+        if(!db.objectStoreNames.contains('records')) {
+            db.createObjectStore('records', { keyPath: 'id' });
+        }
+    };
+    dbRequest.onsuccess = (e) => { db = e.target.result; };
+
+    // === 防意外刷新机制 ===
+    window.addEventListener('beforeunload', (e) => {
+        if (isRecording || isUploading) {
+            e.preventDefault();
+            e.returnValue = 'You are currently recording or uploading. Are you sure you want to leave?';
+        }
+    });
 
     window.addEventListener('load', () => {
         localStorage.setItem('stu_uuid', myUUID);
@@ -162,6 +186,8 @@
     function initPeer() {
         if(!teacherId) return updateStatus("❌ Invalid Link", "bg-red-600");
         updateStatus("🔄 Connecting...", "bg-yellow-600");
+        
+        if(peer) peer.destroy(); // 销毁旧实例防冲突
         peer = new Peer();
         
         peer.on('open', () => {
@@ -173,31 +199,37 @@
             });
             
             conn.on('data', (msg) => {
-                if(msg.type === 'ping') {
-                    // Respond to teacher's heartbeat
-                    conn.send({ type: 'pong' });
-                }
+                if(msg.type === 'ping') conn.send({ type: 'pong' });
                 if(msg.type === 'topic') document.getElementById('topic-display').innerText = msg.data;
-                if(msg.type === 'ack') completeUpload();
+                if(msg.type === 'ack') completeUpload(msg.transferId);
                 if(msg.type === 'feedback') {
-                    saveAndShowFeedback(msg.data);
+                    // 收到反馈，存入对应的本地记录中并弹窗
+                    updateRecordWithFeedback(msg.transferId, msg.data);
                 }
             });
             
             conn.on('close', () => updateStatus("🔴 Disconnected", "bg-red-600"));
         });
 
-        // Auto-reconnect on silent drops
         peer.on('disconnected', () => {
-            updateStatus("🔄 Reconnecting...", "bg-yellow-600");
-            setTimeout(() => { if (!peer.destroyed) peer.reconnect(); }, 1000);
+            updateStatus("🔄 Disconnected", "bg-yellow-600");
+            // 不自动重连太频繁，依赖手动点击或者轻度重连
+            setTimeout(() => { if (!peer.destroyed) peer.reconnect(); }, 2000);
         });
+    }
+
+    function manualReconnect() {
+        if (isUploading || isRecording) {
+            return alert("Finish your current task before reconnecting.");
+        }
+        updateStatus("🔄 Reconnecting...", "bg-yellow-600");
+        initPeer();
     }
 
     function updateStatus(text, bg) {
         const el = document.getElementById('conn-status');
-        el.innerText = text;
-        el.parentElement.className = `fixed top-0 left-0 w-full text-white text-xs p-2 flex justify-between px-4 z-50 shadow-md ${bg}`;
+        el.innerHTML = text;
+        el.parentElement.className = `fixed top-0 left-0 w-full text-white text-xs p-2 flex justify-between items-center px-4 z-50 shadow-md cursor-pointer ${bg}`;
     }
 
     // --- 录音逻辑 ---
@@ -217,7 +249,7 @@
                 
                 finalTranscript = "";
                 document.getElementById('transcript-box').innerText = "";
-            } catch(e) { alert("Microphone access denied. Please use HTTPS."); }
+            } catch(e) { alert("Microphone access denied. Please check permissions."); }
         } else {
             stopRecording();
             stopTimer();
@@ -263,12 +295,14 @@
         if(recognition) { recognition.onend = null; recognition.stop(); }
     }
 
-    // --- 分片传输逻辑 ---
+    // --- 分片传输逻辑 (加入 Buffer 节流机制) ---
     function sendDataChunked() {
-        if(!conn || !conn.open) return alert("Not connected to teacher. Please wait or refresh.");
+        if(!conn || !conn.open) return alert("Not connected to teacher. Tap top bar to reconnect.");
         
+        isUploading = true;
         const blob = new Blob(audioChunks, { type: 'audio/webm' });
         const text = document.getElementById('transcript-box').innerText;
+        const currentTopic = document.getElementById('topic-display').innerText;
         
         const btn = document.getElementById('btn-send');
         btn.classList.add('hidden');
@@ -283,12 +317,28 @@
             const buffer = e.target.result;
             const totalSize = buffer.byteLength;
             
+            // 立即存入本地数据库
+            saveToDB({
+                id: transferId,
+                date: new Date().toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}),
+                topic: currentTopic,
+                text: text,
+                audioBlob: blob,
+                feedback: null
+            });
+
             conn.send({
                 type: 'file-start', transferId: transferId, totalSize: totalSize,
                 mimeType: 'audio/webm', meta: { uuid: myUUID, name: myName, text: text }
             });
 
             function sendNextChunk() {
+                // 关键防拥堵逻辑：监控 WebRTC Buffer，如果超载则等待
+                if (conn.dataChannel && conn.dataChannel.bufferedAmount > 256 * 1024) {
+                    setTimeout(sendNextChunk, 50); // 缓冲超过 256KB，暂停发送 50ms
+                    return;
+                }
+
                 if(offset < totalSize) {
                     const chunk = buffer.slice(offset, offset + CHUNK_SIZE);
                     conn.send({ type: 'file-chunk', transferId: transferId, chunk: chunk });
@@ -298,7 +348,9 @@
                     
                     document.getElementById('progress-bar').style.width = percent + "%";
                     document.getElementById('progress-text').innerText = `Uploading... ${percent}%`;
-                    setTimeout(sendNextChunk, 15); 
+                    
+                    // 网络空闲时快速发送
+                    setTimeout(sendNextChunk, 2); 
                 } else {
                     conn.send({ type: 'file-end', transferId: transferId });
                     document.getElementById('progress-text').innerText = "Verifying with server...";
@@ -310,11 +362,12 @@
         reader.readAsArrayBuffer(blob);
     }
 
-    function completeUpload() {
+    function completeUpload(transferId) {
+        isUploading = false;
         document.getElementById('progress-bar').style.width = "100%";
         document.getElementById('progress-bar').classList.remove('animate-pulse');
         document.getElementById('progress-text').innerText = "Done!";
-        alert("✅ Sent Successfully!");
+        alert("✅ Sent Successfully! Kept in local records.");
         resetUI();
     }
 
@@ -343,21 +396,90 @@
     }
     function stopTimer() { clearInterval(timerInterval); }
 
-    // --- 历史与反馈逻辑 ---
-    function saveAndShowFeedback(data) {
-        const currentTopic = document.getElementById('topic-display').innerText;
-        const record = {
-            id: Date.now(),
-            date: new Date().toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}),
-            topic: currentTopic,
-            data: data
-        };
-        // Save to top of history
-        feedbackHistory.unshift(record);
-        localStorage.setItem('stu_feedback_history', JSON.stringify(feedbackHistory));
-        
-        showFeedback(data);
+    // --- IndexedDB 数据库操作逻辑 ---
+    function saveToDB(record) {
+        if(!db) return;
+        const tx = db.transaction('records', 'readwrite');
+        tx.objectStore('records').put(record);
     }
+
+    function deleteFromDB(id) {
+        if(!db) return;
+        if(!confirm("Delete this record permanently?")) return;
+        const tx = db.transaction('records', 'readwrite');
+        tx.objectStore('records').delete(id);
+        tx.oncomplete = () => loadHistoryUI();
+    }
+
+    function updateRecordWithFeedback(id, feedbackData) {
+        if(!db) return showFeedback(feedbackData);
+        const tx = db.transaction('records', 'readwrite');
+        const store = tx.objectStore('records');
+        const req = store.get(id);
+        req.onsuccess = (e) => {
+            const record = e.target.result;
+            if(record) {
+                record.feedback = feedbackData;
+                store.put(record);
+            }
+            showFeedback(feedbackData);
+        };
+    }
+
+    function openHistory() {
+        document.getElementById('history-modal').classList.remove('hidden');
+        loadHistoryUI();
+    }
+
+    function closeHistory() { document.getElementById('history-modal').classList.add('hidden'); }
+
+    function loadHistoryUI() {
+        const list = document.getElementById('history-list');
+        list.innerHTML = '<p class="text-center text-gray-400 mt-10"><i class="fas fa-spinner fa-spin"></i> Loading...</p>';
+        
+        if(!db) { list.innerHTML = '<p class="text-center text-red-400">Database Error.</p>'; return; }
+        
+        const tx = db.transaction('records', 'readonly');
+        const req = tx.objectStore('records').getAll();
+        
+        req.onsuccess = (e) => {
+            const records = e.target.result.reverse(); // 最新的在最上面
+            list.innerHTML = '';
+            
+            if(records.length === 0) {
+                list.innerHTML = '<p class="text-center text-gray-400 mt-10">No records found locally.</p>';
+                return;
+            }
+
+            records.forEach(item => {
+                const audioUrl = URL.createObjectURL(item.audioBlob);
+                const scoreBadge = item.feedback 
+                    ? `<button onclick='viewSpecificFeedback(${JSON.stringify(item.feedback).replace(/'/g, "&apos;")})' class="bg-indigo-100 text-indigo-700 font-bold px-3 py-1 rounded-full text-xs shadow-sm hover:bg-indigo-200">Score: ${item.feedback.estimated_score} <i class="fas fa-chevron-right ml-1"></i></button>`
+                    : `<span class="bg-gray-100 text-gray-500 font-bold px-3 py-1 rounded-full text-xs">Pending Teacher</span>`;
+
+                list.innerHTML += `
+                    <div class="bg-gray-50 p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col gap-3">
+                        <div class="flex justify-between items-start">
+                            <div class="overflow-hidden pr-2">
+                                <div class="text-xs text-gray-400 mb-1"><i class="fas fa-clock"></i> ${item.date}</div>
+                                <div class="text-sm font-bold text-gray-700 leading-tight">${item.topic}</div>
+                            </div>
+                            <button onclick="deleteFromDB('${item.id}')" class="text-gray-400 hover:text-red-500 p-1"><i class="fas fa-trash"></i></button>
+                        </div>
+                        <div class="text-xs text-gray-500 italic bg-white p-2 rounded border border-gray-100 max-h-16 overflow-y-auto">
+                            "${item.text || "No speech detected"}"
+                        </div>
+                        <audio controls src="${audioUrl}" class="w-full h-8"></audio>
+                        <div class="flex justify-between items-center mt-1 border-t pt-2 border-gray-200">
+                            ${scoreBadge}
+                        </div>
+                    </div>
+                `;
+            });
+        };
+    }
+
+    function viewSpecificFeedback(data) { showFeedback(data); }
 
     function showFeedback(data) {
         document.getElementById('fb-score').innerText = data.estimated_score;
@@ -376,35 +498,6 @@
     }
     
     function closeModal() { document.getElementById('feedback-modal').classList.add('hidden'); }
-
-    function openHistory() {
-        const list = document.getElementById('history-list');
-        list.innerHTML = '';
-        if(feedbackHistory.length === 0) {
-            list.innerHTML = '<p class="text-center text-gray-400 mt-10">No history available yet.</p>';
-        } else {
-            feedbackHistory.forEach((item, index) => {
-                list.innerHTML += `
-                    <div onclick="viewHistoryItem(${index})" class="bg-gray-50 p-3 rounded-lg border border-gray-200 active:bg-gray-200 transition cursor-pointer flex justify-between items-center">
-                        <div class="overflow-hidden pr-2">
-                            <div class="text-xs text-gray-400 mb-1">${item.date}</div>
-                            <div class="text-sm font-bold text-gray-700 truncate">${item.topic}</div>
-                        </div>
-                        <div class="bg-indigo-100 text-indigo-700 font-bold px-3 py-1 rounded-full text-sm shrink-0">
-                            ${item.data.estimated_score}
-                        </div>
-                    </div>
-                `;
-            });
-        }
-        document.getElementById('history-modal').classList.remove('hidden');
-    }
-
-    function closeHistory() { document.getElementById('history-modal').classList.add('hidden'); }
-
-    function viewHistoryItem(index) {
-        showFeedback(feedbackHistory[index].data);
-    }
 </script>
 </body>
 </html>
