@@ -8,7 +8,6 @@
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        /* 关键点：禁用移动端下拉刷新 */
         body, html { overscroll-behavior-y: none; }
         .recording-pulse { animation: pulse-red 1.5s infinite; }
         @keyframes pulse-red { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
@@ -29,14 +28,14 @@
     <div id="setup-panel" class="bg-white w-full max-w-sm rounded-xl shadow-lg p-6 mt-20 text-center hidden">
         <h2 class="text-xl font-bold mb-4 text-gray-800">English Speaking Class</h2>
         <input type="text" id="name-input" class="w-full border-b-2 border-indigo-200 p-2 text-center text-lg outline-none mb-6 focus:border-indigo-600 transition" placeholder="Enter your name (e.g., Leo)">
-        <button onclick="login()" class="w-full bg-indigo-600 text-white py-3 rounded-lg font-bold shadow hover:bg-indigo-700 transition">Join Class</button>
+        <button onclick="login()" class="w-full bg-indigo-600 text-white py-3 rounded-lg font-bold shadow hover:bg-indigo-700 transition">Join Class / Practice Offline</button>
     </div>
 
     <div id="main-panel" class="hidden w-full max-w-sm mt-16 flex flex-col gap-4 animate-fade-in">
         
         <div class="bg-white p-4 rounded-xl shadow border-l-4 border-indigo-500">
             <h3 class="text-xs font-bold text-gray-400 uppercase mb-1">📢 Topic</h3>
-            <p id="topic-display" class="text-gray-800 font-medium text-lg">Waiting for teacher...</p>
+            <textarea id="topic-display" class="w-full text-gray-800 font-medium text-lg outline-none bg-transparent border-b border-dashed border-gray-300 focus:border-indigo-500 placeholder-gray-400 resize-none overflow-hidden" rows="2" placeholder="Type topic for offline practice or wait for teacher..."></textarea>
         </div>
 
         <div class="bg-white p-6 rounded-xl shadow flex flex-col items-center relative">
@@ -143,7 +142,6 @@
     let timerInterval;
     let finalTranscript = ""; 
 
-    // === IndexedDB 本地数据库设置 ===
     let db;
     const dbRequest = indexedDB.open("SpeakingAppDB", 1);
     dbRequest.onupgradeneeded = (e) => {
@@ -154,7 +152,6 @@
     };
     dbRequest.onsuccess = (e) => { db = e.target.result; };
 
-    // === 防意外刷新机制 ===
     window.addEventListener('beforeunload', (e) => {
         if (isRecording || isUploading) {
             e.preventDefault();
@@ -184,10 +181,13 @@
     }
 
     function initPeer() {
-        if(!teacherId) return updateStatus("❌ Invalid Link", "bg-red-600");
+        if(!teacherId) {
+            updateStatus("📵 Offline Mode", "bg-gray-600");
+            return;
+        }
         updateStatus("🔄 Connecting...", "bg-yellow-600");
         
-        if(peer) peer.destroy(); // 销毁旧实例防冲突
+        if(peer) peer.destroy();
         peer = new Peer();
         
         peer.on('open', () => {
@@ -200,10 +200,9 @@
             
             conn.on('data', (msg) => {
                 if(msg.type === 'ping') conn.send({ type: 'pong' });
-                if(msg.type === 'topic') document.getElementById('topic-display').innerText = msg.data;
+                if(msg.type === 'topic') document.getElementById('topic-display').value = msg.data;
                 if(msg.type === 'ack') completeUpload(msg.transferId);
                 if(msg.type === 'feedback') {
-                    // 收到反馈，存入对应的本地记录中并弹窗
                     updateRecordWithFeedback(msg.transferId, msg.data);
                 }
             });
@@ -213,7 +212,6 @@
 
         peer.on('disconnected', () => {
             updateStatus("🔄 Disconnected", "bg-yellow-600");
-            // 不自动重连太频繁，依赖手动点击或者轻度重连
             setTimeout(() => { if (!peer.destroyed) peer.reconnect(); }, 2000);
         });
     }
@@ -222,6 +220,7 @@
         if (isUploading || isRecording) {
             return alert("Finish your current task before reconnecting.");
         }
+        if(!teacherId) return alert("You are in offline mode without a teacher link.");
         updateStatus("🔄 Reconnecting...", "bg-yellow-600");
         initPeer();
     }
@@ -232,7 +231,6 @@
         el.parentElement.className = `fixed top-0 left-0 w-full text-white text-xs p-2 flex justify-between items-center px-4 z-50 shadow-md cursor-pointer ${bg}`;
     }
 
-    // --- 录音逻辑 ---
     async function toggleRecord() {
         if(!isRecording) {
             try {
@@ -295,20 +293,35 @@
         if(recognition) { recognition.onend = null; recognition.stop(); }
     }
 
-    // --- 分片传输逻辑 (加入 Buffer 节流机制) ---
     function sendDataChunked() {
-        if(!conn || !conn.open) return alert("Not connected to teacher. Tap top bar to reconnect.");
-        
         isUploading = true;
         const blob = new Blob(audioChunks, { type: 'audio/webm' });
         const text = document.getElementById('transcript-box').innerText;
-        const currentTopic = document.getElementById('topic-display').innerText;
+        const currentTopic = document.getElementById('topic-display').value.trim() || "Offline Practice";
         
         const btn = document.getElementById('btn-send');
         btn.classList.add('hidden');
-        document.getElementById('progress-container').classList.remove('hidden');
         
         const transferId = Date.now().toString();
+        
+        saveToDB({
+            id: transferId,
+            date: new Date().toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}),
+            topic: currentTopic,
+            text: text,
+            audioBlob: blob,
+            feedback: null
+        });
+
+        // Offline mode check
+        if(!conn || !conn.open) {
+            isUploading = false;
+            alert("✅ Saved locally! You can send it to the teacher later from your History.");
+            resetUI();
+            return;
+        }
+
+        document.getElementById('progress-container').classList.remove('hidden');
         const CHUNK_SIZE = 16 * 1024;
         let offset = 0;
         
@@ -317,25 +330,14 @@
             const buffer = e.target.result;
             const totalSize = buffer.byteLength;
             
-            // 立即存入本地数据库
-            saveToDB({
-                id: transferId,
-                date: new Date().toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}),
-                topic: currentTopic,
-                text: text,
-                audioBlob: blob,
-                feedback: null
-            });
-
             conn.send({
                 type: 'file-start', transferId: transferId, totalSize: totalSize,
-                mimeType: 'audio/webm', meta: { uuid: myUUID, name: myName, text: text }
+                mimeType: 'audio/webm', meta: { uuid: myUUID, name: myName, text: text, isHistory: false, topic: currentTopic }
             });
 
             function sendNextChunk() {
-                // 关键防拥堵逻辑：监控 WebRTC Buffer，如果超载则等待
                 if (conn.dataChannel && conn.dataChannel.bufferedAmount > 256 * 1024) {
-                    setTimeout(sendNextChunk, 50); // 缓冲超过 256KB，暂停发送 50ms
+                    setTimeout(sendNextChunk, 50);
                     return;
                 }
 
@@ -349,7 +351,6 @@
                     document.getElementById('progress-bar').style.width = percent + "%";
                     document.getElementById('progress-text').innerText = `Uploading... ${percent}%`;
                     
-                    // 网络空闲时快速发送
                     setTimeout(sendNextChunk, 2); 
                 } else {
                     conn.send({ type: 'file-end', transferId: transferId });
@@ -396,7 +397,6 @@
     }
     function stopTimer() { clearInterval(timerInterval); }
 
-    // --- IndexedDB 数据库操作逻辑 ---
     function saveToDB(record) {
         if(!db) return;
         const tx = db.transaction('records', 'readwrite');
@@ -443,7 +443,7 @@
         const req = tx.objectStore('records').getAll();
         
         req.onsuccess = (e) => {
-            const records = e.target.result.reverse(); // 最新的在最上面
+            const records = e.target.result.reverse(); 
             list.innerHTML = '';
             
             if(records.length === 0) {
@@ -455,7 +455,10 @@
                 const audioUrl = URL.createObjectURL(item.audioBlob);
                 const scoreBadge = item.feedback 
                     ? `<button onclick='viewSpecificFeedback(${JSON.stringify(item.feedback).replace(/'/g, "&apos;")})' class="bg-indigo-100 text-indigo-700 font-bold px-3 py-1 rounded-full text-xs shadow-sm hover:bg-indigo-200">Score: ${item.feedback.estimated_score} <i class="fas fa-chevron-right ml-1"></i></button>`
-                    : `<span class="bg-gray-100 text-gray-500 font-bold px-3 py-1 rounded-full text-xs">Pending Teacher</span>`;
+                    : `<div class="flex gap-2">
+                         <span class="bg-gray-100 text-gray-500 font-bold px-3 py-1 rounded-full text-xs">Pending</span>
+                         <button onclick="sendFromHistory('${item.id}')" class="bg-green-100 text-green-700 font-bold px-3 py-1 rounded-full text-xs shadow-sm hover:bg-green-200" title="Send to Teacher"><i class="fas fa-paper-plane mr-1"></i> Send</button>
+                       </div>`;
 
                 list.innerHTML += `
                     <div class="bg-gray-50 p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col gap-3">
@@ -476,6 +479,58 @@
                     </div>
                 `;
             });
+        };
+    }
+
+    function sendFromHistory(id) {
+        if(!conn || !conn.open) return alert("Not connected to teacher. Please connect first.");
+        if(isUploading) return alert("Please wait for the current upload to finish.");
+        
+        const tx = db.transaction('records', 'readonly');
+        const req = tx.objectStore('records').get(id);
+        req.onsuccess = (e) => {
+            const record = e.target.result;
+            if(!record) return;
+
+            isUploading = true;
+            closeHistory(); 
+            document.getElementById('progress-container').classList.remove('hidden');
+            
+            const reader = new FileReader();
+            reader.onload = async (ev) => {
+                const buffer = ev.target.result;
+                const totalSize = buffer.byteLength;
+                
+                conn.send({
+                    type: 'file-start', transferId: id, totalSize: totalSize,
+                    mimeType: 'audio/webm', meta: { uuid: myUUID, name: myName, text: record.text, isHistory: true, topic: record.topic }
+                });
+
+                const CHUNK_SIZE = 16 * 1024;
+                let offset = 0;
+
+                function sendNextChunk() {
+                    if (conn.dataChannel && conn.dataChannel.bufferedAmount > 256 * 1024) {
+                        setTimeout(sendNextChunk, 50);
+                        return;
+                    }
+                    if(offset < totalSize) {
+                        const chunk = buffer.slice(offset, offset + CHUNK_SIZE);
+                        conn.send({ type: 'file-chunk', transferId: id, chunk: chunk });
+                        offset += CHUNK_SIZE;
+                        const percent = Math.min(99, Math.round((offset / totalSize) * 100));
+                        document.getElementById('progress-bar').style.width = percent + "%";
+                        document.getElementById('progress-text').innerText = `Uploading History... ${percent}%`;
+                        setTimeout(sendNextChunk, 2); 
+                    } else {
+                        conn.send({ type: 'file-end', transferId: id });
+                        document.getElementById('progress-text').innerText = "Verifying with server...";
+                        document.getElementById('progress-bar').classList.add('animate-pulse');
+                    }
+                }
+                sendNextChunk();
+            };
+            reader.readAsArrayBuffer(record.audioBlob);
         };
     }
 
